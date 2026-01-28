@@ -7,30 +7,33 @@ import shutil
 import sys
 from typing import Dict, Any
 from mcp.server.fastmcp import FastMCP
+from .platform_utils import (
+    find_ghidra_path,
+    configure_console_encoding,
+    get_platform_info,
+)
 
 # --- PORTABLE CONFIGURATION ---
 
-# 1. Base Directory: Where this python file is located
-BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+# 1. Base Directory: Project root (parent of src/)
+BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
-# 2. Scripts Directory: Relative to BASE_DIR
-# We expect the Java script to be in: ./GhidraScripts/GhidraDataDump.java
-SCRIPT_DIR = os.path.join(BASE_DIR, "GhidraScripts")
+# 2. Scripts Directory: Ghidra Java scripts
+SCRIPT_DIR = os.path.join(BASE_DIR, "scripts", "ghidra")
 
 # 3. Output Directory: Relative to BASE_DIR
 # We will save JSON logs to: ./analysis_output/
 LOGS_DIR = os.path.join(BASE_DIR, "analysis_output")
 
 # 4. Ghidra Headless Path
-# TRY to get it from an environment variable first (Best for sharing code)
-# If not set, fall back to a hardcoded path (You can change this default)
-GHIDRA_HEADLESS_PATH = os.getenv("GHIDRA_HEADLESS_PATH", r"C:\ghidra_12.0.1_PUBLIC_20260114\ghidra_12.0.1_PUBLIC\support\analyzeHeadless.bat")
+# Auto-detect based on OS and common install locations
+# Priority: GHIDRA_HEADLESS_PATH env var > GHIDRA_INSTALL_DIR env var > auto-detect
+GHIDRA_HEADLESS_PATH = find_ghidra_path()
 
 # ------------------------------
 
-# Force UTF-8 for Windows consoles
-if sys.platform == "win32":
-    sys.stdout.reconfigure(encoding='utf-8')
+# Configure console encoding for cross-platform UTF-8 support
+configure_console_encoding()
 
 mcp = FastMCP("Ghidra Analyst")
 
@@ -61,9 +64,19 @@ def analyze_binary(binary_path: str) -> str:
         os.makedirs(LOGS_DIR)
 
     # Check if Ghidra path is valid
-    if not os.path.exists(GHIDRA_HEADLESS_PATH):
-        return (f"CONFIGURATION ERROR: Could not find Ghidra at: {GHIDRA_HEADLESS_PATH}\n"
-                f"Please set the 'GHIDRA_HEADLESS_PATH' environment variable to your Ghidra 'analyzeHeadless' executable.")
+    if not GHIDRA_HEADLESS_PATH or not os.path.exists(GHIDRA_HEADLESS_PATH):
+        platform_info = get_platform_info()
+        return (
+            f"CONFIGURATION ERROR: Ghidra not found.\n"
+            f"Platform: {platform_info['os']}\n"
+            f"Expected executable: {platform_info['ghidra_executable']}\n\n"
+            f"Please do ONE of the following:\n"
+            f"1. Set GHIDRA_HEADLESS_PATH to the full path of your analyzeHeadless executable\n"
+            f"2. Set GHIDRA_INSTALL_DIR to your Ghidra installation directory\n"
+            f"3. Install Ghidra to a standard location:\n"
+            f"   - Linux: /opt/ghidra/, ~/ghidra/\n"
+            f"   - Windows: C:\\ghidra\\, C:\\Program Files\\ghidra\\\n"
+        )
 
     # Create Temp Project Folder (deleted after analysis)
     temp_proj_dir = tempfile.mkdtemp()
@@ -164,5 +177,31 @@ def read_strings(binary_path: str) -> str:
     valid_strings = [s['value'] for s in data['strings'] if len(s['value']) > 5]
     return json.dumps(valid_strings[:100])
 
-if __name__ == "__main__":
+@mcp.tool()
+def health_check() -> str:
+    """
+    Check MCP server status, Ghidra installation, and platform info.
+    Use this to diagnose configuration issues.
+    """
+    result = {
+        "status": "ok",
+        "platform": get_platform_info(),
+        "ghidra_path": GHIDRA_HEADLESS_PATH,
+        "ghidra_found": GHIDRA_HEADLESS_PATH is not None and os.path.exists(GHIDRA_HEADLESS_PATH),
+        "scripts_dir": SCRIPT_DIR,
+        "scripts_found": os.path.exists(SCRIPT_DIR),
+        "output_dir": LOGS_DIR,
+    }
+    
+    if not result["ghidra_found"]:
+        result["status"] = "error"
+        result["error"] = "Ghidra not found"
+    
+    return json.dumps(result, indent=2)
+
+def main():
+    """Entry point for ghidra-mcp command."""
     mcp.run()
+
+if __name__ == "__main__":
+    main()

@@ -1,1 +1,21 @@
-/analysis_output
+# Generated files
+/analysis_output/
+__pycache__/
+*.pyc
+*.pyo
+
+# Virtual environment
+.venv/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+
+# Testing
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Skills/agent config (optional)
+.agent/
