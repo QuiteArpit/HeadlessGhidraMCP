@@ -40,9 +40,11 @@ pip install mcp
 ### 3. Configure the Ghidra Path (Critical Step!)
 You need to tell the script where your Ghidra installation is located.
 
-**Option A:** Using an Environment Variable (Recommended) Set the GHIDRA_HEADLESS_PATH variable to point to your analyzeHeadless executable.
+**Option A:** *Using an Environment Variable (Recommended)*
 
-* **Windows (PowerShell):**
+Set the GHIDRA_HEADLESS_PATH variable to point to your analyzeHeadless executable.
+
+- **Windows (PowerShell):**
 ```PowerShell
 $env:GHIDRA_HEADLESS_PATH = "C:\Path\To\Ghidra\support\analyzeHeadless.bat"
 ```
@@ -52,7 +54,9 @@ $env:GHIDRA_HEADLESS_PATH = "C:\Path\To\Ghidra\support\analyzeHeadless.bat"
 export GHIDRA_HEADLESS_PATH="/Path/To/Ghidra/support/analyzeHeadless"
 ```
 
-**Option B:** Quick Edit Alternatively, you can open ghidra_mcp.py in a text editor and manually set the fallback path on line 28:
+**Option B:** *Quick Edit*
+
+Alternatively, you can open ghidra_mcp.py in a text editor and manually set the fallback path on line 28:
 
 ```Python
 # ghidra_mcp.py
@@ -110,7 +114,7 @@ I have a binary located at C:\Users\YOUR_USER\...\Sample\program.exe. Please ana
 * ```ghidra_mcp.py```: The main MCP server script.
 * ```GhidraScripts/```: Contains the Java script (GhidraDataDump.java) that runs inside Ghidra.
 * ```analysis_output/```: (Created at runtime) Stores the JSON analysis results.
-* ```sample```: Contains dummy binaries for testing.
+* ```Sample/```: Contains dummy binaries for testing.
 
 ---
 
