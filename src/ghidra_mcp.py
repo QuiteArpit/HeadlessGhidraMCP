@@ -12,6 +12,7 @@ from .platform_utils import (
     configure_console_encoding,
     get_platform_info,
 )
+from .response_utils import make_response, make_error, Timer
 
 # --- PORTABLE CONFIGURATION ---
 
@@ -22,12 +23,9 @@ BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 SCRIPT_DIR = os.path.join(BASE_DIR, "scripts", "ghidra")
 
 # 3. Output Directory: Relative to BASE_DIR
-# We will save JSON logs to: ./analysis_output/
 LOGS_DIR = os.path.join(BASE_DIR, "analysis_output")
 
-# 4. Ghidra Headless Path
-# Auto-detect based on OS and common install locations
-# Priority: GHIDRA_HEADLESS_PATH env var > GHIDRA_INSTALL_DIR env var > auto-detect
+# 4. Ghidra Headless Path (auto-detect)
 GHIDRA_HEADLESS_PATH = find_ghidra_path()
 
 # ------------------------------
@@ -37,10 +35,12 @@ configure_console_encoding()
 
 mcp = FastMCP("Ghidra Analyst")
 
-# Session Cache
-current_session_context: Dict[str, str] = {} 
+# Session Cache: {binary_path: json_path}
+current_session_context: Dict[str, str] = {}
+
 
 def get_file_hash(filepath: str) -> str:
+    """Calculate SHA256 hash of a file."""
     sha256 = hashlib.sha256()
     try:
         with open(filepath, "rb") as f:
@@ -50,37 +50,39 @@ def get_file_hash(filepath: str) -> str:
     except FileNotFoundError:
         return "file_not_found"
 
+
 @mcp.tool()
 def analyze_binary(binary_path: str) -> str:
     """
     Analyzes a binary using Ghidra and saves the results to a JSON file
     in the 'analysis_output' folder.
     """
+    # Validate file exists
     if not os.path.exists(binary_path):
-        return f"Error: File {binary_path} not found."
-
-    # Ensure output directory exists
-    if not os.path.exists(LOGS_DIR):
-        os.makedirs(LOGS_DIR)
-
-    # Check if Ghidra path is valid
-    if not GHIDRA_HEADLESS_PATH or not os.path.exists(GHIDRA_HEADLESS_PATH):
-        platform_info = get_platform_info()
-        return (
-            f"CONFIGURATION ERROR: Ghidra not found.\n"
-            f"Platform: {platform_info['os']}\n"
-            f"Expected executable: {platform_info['ghidra_executable']}\n\n"
-            f"Please do ONE of the following:\n"
-            f"1. Set GHIDRA_HEADLESS_PATH to the full path of your analyzeHeadless executable\n"
-            f"2. Set GHIDRA_INSTALL_DIR to your Ghidra installation directory\n"
-            f"3. Install Ghidra to a standard location:\n"
-            f"   - Linux: /opt/ghidra/, ~/ghidra/\n"
-            f"   - Windows: C:\\ghidra\\, C:\\Program Files\\ghidra\\\n"
+        return make_error(
+            f"File not found: {binary_path}",
+            code="FILE_NOT_FOUND"
         )
 
-    # Create Temp Project Folder (deleted after analysis)
+    # Ensure output directory exists
+    os.makedirs(LOGS_DIR, exist_ok=True)
+
+    # Check Ghidra path
+    if not GHIDRA_HEADLESS_PATH or not os.path.exists(GHIDRA_HEADLESS_PATH):
+        platform_info = get_platform_info()
+        return make_error(
+            f"Ghidra not found. Platform: {platform_info['os']}. "
+            f"Set GHIDRA_HEADLESS_PATH or install to standard location.",
+            code="GHIDRA_NOT_FOUND"
+        )
+
+    # Get file hash for project naming
+    file_hash = get_file_hash(binary_path)[:8]
+    binary_name = os.path.basename(binary_path)
+
+    # Create temp project folder
     temp_proj_dir = tempfile.mkdtemp()
-    proj_name = f"ghidra_proj_{get_file_hash(binary_path)[:8]}"
+    proj_name = f"ghidra_proj_{file_hash}"
 
     cmd = [
         GHIDRA_HEADLESS_PATH,
@@ -93,56 +95,66 @@ def analyze_binary(binary_path: str) -> str:
         "-analysisTimeoutPerFile", "600"
     ]
 
-    # Pass the SAFE relative output directory to Java
     env = os.environ.copy()
     env["GHIDRA_ANALYSIS_OUTPUT"] = LOGS_DIR
 
-    try:
-        print(f"[INFO] Starting Analysis on: {binary_path}")
-        print(f"[INFO] Saving Output to: {LOGS_DIR}")
-        
-        result = subprocess.run(
-            cmd, 
-            env=env, 
-            check=False, 
-            capture_output=True, 
-            text=True, 
-            encoding='utf-8', 
-            errors='replace'
-        )
-        
-        # --- PARSING LOGIC ---
-        generated_json_path = None
-        
-        # 1. Try to find the tag from Java stdout
-        for line in result.stdout.splitlines():
-            if "GHIDRA_JSON_GENERATED:" in line:
-                raw_path = line.split("GHIDRA_JSON_GENERATED:")[1].strip()
-                generated_json_path = raw_path.strip('"').strip("'")
-                break
-        
-        # 2. Fallback: Find newest file in LOGS_DIR
-        if not generated_json_path or not os.path.exists(generated_json_path):
-            files = [os.path.join(LOGS_DIR, f) for f in os.listdir(LOGS_DIR) if f.endswith(".json")]
-            if files:
-                generated_json_path = max(files, key=os.path.getctime)
-            else:
-                return f"Analysis Failed. No JSON found in {LOGS_DIR}.\nDebug Stdout:\n{result.stdout}\n"
+    with Timer() as timer:
+        try:
+            result = subprocess.run(
+                cmd,
+                env=env,
+                check=False,
+                capture_output=True,
+                text=True,
+                encoding='utf-8',
+                errors='replace'
+            )
 
-        current_session_context[binary_path] = generated_json_path
-        
-        with open(generated_json_path, 'r', encoding='utf-8') as f:
-            data = json.load(f)
+            # Find generated JSON path
+            generated_json_path = None
+            for line in result.stdout.splitlines():
+                if "GHIDRA_JSON_GENERATED:" in line:
+                    raw_path = line.split("GHIDRA_JSON_GENERATED:")[1].strip()
+                    generated_json_path = raw_path.strip('"').strip("'")
+                    break
 
-        shutil.rmtree(temp_proj_dir, ignore_errors=True)
-        
-        rel_path = os.path.relpath(generated_json_path, BASE_DIR)
-        return f"Success! Analysis saved to: {rel_path}\nFunctions found: {len(data['functions'])}\nStrings found: {len(data['strings'])}"
+            # Fallback: find newest JSON in output dir
+            if not generated_json_path or not os.path.exists(generated_json_path):
+                files = [os.path.join(LOGS_DIR, f) for f in os.listdir(LOGS_DIR) if f.endswith(".json")]
+                if files:
+                    generated_json_path = max(files, key=os.path.getctime)
+                else:
+                    return make_error(
+                        f"Analysis failed. No JSON output found.",
+                        code="ANALYSIS_FAILED"
+                    )
 
-    except Exception as e:
-        return f"System Error: {str(e)}"
+            # Load and validate JSON
+            with open(generated_json_path, 'r', encoding='utf-8') as f:
+                data = json.load(f)
+
+            # Store in session
+            current_session_context[binary_path] = generated_json_path
+
+            # Cleanup temp project
+            shutil.rmtree(temp_proj_dir, ignore_errors=True)
+
+            return make_response(data={
+                "binary": binary_path,
+                "binary_name": binary_name,
+                "binary_hash": file_hash,
+                "output_path": os.path.relpath(generated_json_path, BASE_DIR),
+                "functions_count": len(data.get('functions', [])),
+                "strings_count": len(data.get('strings', [])),
+                "analysis_time_ms": timer.elapsed_ms
+            })
+
+        except Exception as e:
+            return make_error(str(e), code="SYSTEM_ERROR")
+
 
 def load_latest_json(binary_path: str):
+    """Load cached analysis JSON for a binary."""
     if binary_path not in current_session_context:
         return None
     json_path = current_session_context[binary_path]
@@ -151,31 +163,85 @@ def load_latest_json(binary_path: str):
     with open(json_path, 'r', encoding='utf-8') as f:
         return json.load(f)
 
+
 @mcp.tool()
-def list_functions(binary_path: str) -> str:
+def list_functions(binary_path: str, limit: int = 300) -> str:
+    """List all functions found in the analyzed binary."""
     data = load_latest_json(binary_path)
     if not data:
-        return "Error: No analysis found. Run 'analyze_binary' first."
-    funcs = [f"{f['name']} (@ {f['entry']})" for f in data['functions']]
-    return json.dumps(funcs[:300]) 
+        return make_error(
+            "No analysis found. Run 'analyze_binary' first.",
+            code="NO_ANALYSIS"
+        )
+
+    functions = data.get('functions', [])
+    func_list = [
+        {"name": f['name'], "address": f['entry']}
+        for f in functions[:limit]
+    ]
+
+    return make_response(data={
+        "binary": binary_path,
+        "total_count": len(functions),
+        "returned_count": len(func_list),
+        "limit": limit,
+        "functions": func_list
+    })
+
 
 @mcp.tool()
 def read_function_code(binary_path: str, function_name: str) -> str:
+    """Decompile and return the C code for a specific function."""
     data = load_latest_json(binary_path)
     if not data:
-        return "Error: No analysis found. Run 'analyze_binary' first."
-    for f in data['functions']:
+        return make_error(
+            "No analysis found. Run 'analyze_binary' first.",
+            code="NO_ANALYSIS"
+        )
+
+    for f in data.get('functions', []):
         if f['name'] == function_name:
-            return f['code']
-    return f"Function '{function_name}' not found."
+            return make_response(data={
+                "binary": binary_path,
+                "function_name": function_name,
+                "address": f.get('entry', 'unknown'),
+                "decompiled_code": f['code']
+            })
+
+    return make_error(
+        f"Function '{function_name}' not found.",
+        code="FUNCTION_NOT_FOUND"
+    )
+
 
 @mcp.tool()
-def read_strings(binary_path: str) -> str:
+def read_strings(binary_path: str, min_length: int = 5, limit: int = 100) -> str:
+    """Extract strings from the analyzed binary."""
     data = load_latest_json(binary_path)
     if not data:
-        return "Error: No analysis found. Run 'analyze_binary' first."
-    valid_strings = [s['value'] for s in data['strings'] if len(s['value']) > 5]
-    return json.dumps(valid_strings[:100])
+        return make_error(
+            "No analysis found. Run 'analyze_binary' first.",
+            code="NO_ANALYSIS"
+        )
+
+    all_strings = data.get('strings', [])
+    filtered = [s for s in all_strings if len(s.get('value', '')) > min_length]
+    
+    string_list = [
+        {"value": s['value'], "address": s.get('address', 'unknown')}
+        for s in filtered[:limit]
+    ]
+
+    return make_response(data={
+        "binary": binary_path,
+        "total_count": len(all_strings),
+        "filtered_count": len(filtered),
+        "returned_count": len(string_list),
+        "min_length": min_length,
+        "limit": limit,
+        "strings": string_list
+    })
+
 
 @mcp.tool()
 def health_check() -> str:
@@ -183,25 +249,31 @@ def health_check() -> str:
     Check MCP server status, Ghidra installation, and platform info.
     Use this to diagnose configuration issues.
     """
-    result = {
-        "status": "ok",
+    ghidra_found = GHIDRA_HEADLESS_PATH is not None and os.path.exists(GHIDRA_HEADLESS_PATH)
+    scripts_found = os.path.exists(SCRIPT_DIR)
+    
+    status = "success" if ghidra_found else "error"
+    
+    response_data = {
         "platform": get_platform_info(),
         "ghidra_path": GHIDRA_HEADLESS_PATH,
-        "ghidra_found": GHIDRA_HEADLESS_PATH is not None and os.path.exists(GHIDRA_HEADLESS_PATH),
+        "ghidra_found": ghidra_found,
         "scripts_dir": SCRIPT_DIR,
-        "scripts_found": os.path.exists(SCRIPT_DIR),
+        "scripts_found": scripts_found,
         "output_dir": LOGS_DIR,
+        "session_binaries": len(current_session_context)
     }
     
-    if not result["ghidra_found"]:
-        result["status"] = "error"
-        result["error"] = "Ghidra not found"
+    if not ghidra_found:
+        return make_error("Ghidra not found", code="GHIDRA_NOT_FOUND")
     
-    return json.dumps(result, indent=2)
+    return make_response(data=response_data)
+
 
 def main():
     """Entry point for ghidra-mcp command."""
     mcp.run()
+
 
 if __name__ == "__main__":
     main()

@@ -1,5 +1,5 @@
 # Generated files
-/analysis_output/
+analysis_output/
 __pycache__/
 *.pyc
 *.pyo
