@@ -1,6 +1,6 @@
 import pytest
 import json
-from unittest.mock import patch
+from unittest.mock import patch, MagicMock
 from src.tools import metadata
 
 # Sample data
@@ -15,9 +15,12 @@ SAMPLE_DATA = {
     ]
 }
 
-@patch('src.tools.metadata.load_json_for_binary')
+@patch('src.tools.metadata.load_data_accessor')
 def test_list_imports(mock_load):
-    mock_load.return_value = SAMPLE_DATA
+    acc = MagicMock()
+    # List imports returns a list in DataAccessor
+    acc.get_imports.return_value = SAMPLE_DATA['imports']
+    mock_load.return_value = acc
     
     res_str = metadata.list_imports("/tmp/bin")
     res = json.loads(res_str)
@@ -26,9 +29,12 @@ def test_list_imports(mock_load):
     assert set(res["data"]["libraries"]) == {"KERNEL32.DLL", "USER32.DLL"}
     assert len(res["data"]["imports_by_library"]["KERNEL32.DLL"]) == 2
 
-@patch('src.tools.metadata.load_json_for_binary')
+@patch('src.tools.metadata.load_data_accessor')
 def test_list_exports(mock_load):
-    mock_load.return_value = SAMPLE_DATA
+    acc = MagicMock()
+    # Export returns a list
+    acc.get_exports.return_value = SAMPLE_DATA['exports']
+    mock_load.return_value = acc
     
     res_str = metadata.list_exports("/tmp/bin")
     res = json.loads(res_str)
@@ -36,7 +42,7 @@ def test_list_exports(mock_load):
     assert res["data"]["total_exports"] == 1
     assert res["data"]["exports"][0]["name"] == "start"
 
-@patch('src.tools.metadata.load_json_for_binary')
+@patch('src.tools.metadata.load_data_accessor')
 def test_no_analysis(mock_load):
     mock_load.return_value = None
     res_str = metadata.list_imports("/tmp/bin")

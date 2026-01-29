@@ -34,17 +34,16 @@ def setup_venv():
         log("[init] Creating venv...")
         subprocess.check_call([sys.executable, "-m", "venv", VENV_DIR])
     
-    # Check if mcp is installed in venv
+    # initial check to avoid pip overhead on every run
+    # We check for 'mcp' as a proxy for "is anything installed?"
     try:
-        result = subprocess.run(
+        subprocess.run(
             [venv_python, "-c", "import mcp"],
-            capture_output=True
+            check=True, capture_output=True
         )
-        if result.returncode != 0:
-            raise ImportError
-    except (ImportError, subprocess.CalledProcessError):
-        log("[init] Installing dependencies...")
-        subprocess.check_call([venv_python, "-m", "pip", "install", "mcp", "-q"])
+    except (subprocess.CalledProcessError, FileNotFoundError):
+        log("[init] Installing dependencies from pyproject.toml...")
+        subprocess.check_call([venv_python, "-m", "pip", "install", "-e", ".", "-q"])
     
     return venv_python
 
@@ -55,11 +54,20 @@ def main():
     if not in_venv():
         venv_python = setup_venv()
         log("[ready] Ghidra MCP server starting")
+        # On Windows, execv might behave differently, but usually works for swapping process
         os.execv(venv_python, [venv_python, __file__])
     
     # Now running inside venv - start the server
     sys.path.insert(0, SCRIPT_DIR)
-    from src.server import main as run_server
+    
+    try:
+        from src.server import main as run_server
+    except ImportError as e:
+        # Fallback: If runtime import fails (drift), install dependencies and retry
+        log(f"[fix] Missing dependency ({e.name}). Auto-healing...")
+        subprocess.check_call([sys.executable, "-m", "pip", "install", "-e", "."])
+        from src.server import main as run_server
+
     run_server()
 
 if __name__ == "__main__":

@@ -4,32 +4,96 @@ Tracks currently loaded binaries in memory.
 """
 import os
 import json
-from typing import Dict, Any, Optional
+import ijson # type: ignore
+from typing import Dict, Any, Optional, Iterator, Union, List
+from collections import OrderedDict
+
+from .config import GHIDRA_SESSION_SIZE, GHIDRA_STREAMING_THRESHOLD_MB
+
+# Session Cache: LRU via OrderedDict directly
+_session_context: OrderedDict[str, Dict[str, Any]] = OrderedDict()
 
 
-# Session Cache: {binary_path: {"hash": str, "json_path": str, "functions": int, "strings": int}}
-_session_context: Dict[str, Dict[str, Any]] = {}
+class DataAccessor:
+    """
+    Abstracts access to analysis data (JSON).
+    Handles switching between In-Memory Dict (Fast) and Streaming (Low RAM).
+    """
+    def __init__(self, json_path: str):
+        self.json_path = json_path
+        self.file_size_mb = os.path.getsize(json_path) / (1024 * 1024)
+        self.use_streaming = self.file_size_mb > GHIDRA_STREAMING_THRESHOLD_MB
+        self._cached_data = None
+
+    def _ensure_loaded(self):
+        if not self.use_streaming and self._cached_data is None:
+            with open(self.json_path, 'r', encoding='utf-8') as f:
+                self._cached_data = json.load(f)
+
+    def get_functions(self) -> Iterator[Dict[str, Any]]:
+        if self.use_streaming:
+            # Re-open file for streaming scan
+            f = open(self.json_path, 'rb')
+            return ijson.items(f, 'functions.item')
+        else:
+            self._ensure_loaded()
+            return iter(self._cached_data.get('functions', []))
+
+    def get_strings(self) -> Iterator[Dict[str, Any]]:
+        if self.use_streaming:
+            f = open(self.json_path, 'rb')
+            return ijson.items(f, 'strings.item')
+        else:
+            self._ensure_loaded()
+            return iter(self._cached_data.get('strings', []))
+            
+    def get_imports(self) -> List[Dict[str, Any]]:
+        # Metadata usually small enough to load fully or stream quickly
+        if self.use_streaming:
+             with open(self.json_path, 'rb') as f:
+                return list(ijson.items(f, 'imports.item'))
+        else:
+            self._ensure_loaded()
+            return self._cached_data.get('imports', [])
+
+    def get_exports(self) -> List[Dict[str, Any]]:
+        if self.use_streaming:
+             with open(self.json_path, 'rb') as f:
+                return list(ijson.items(f, 'exports.item'))
+        else:
+            self._ensure_loaded()
+            return self._cached_data.get('exports', [])
 
 
 def add_to_session(binary_path: str, file_hash: str, json_path: str, 
                    functions: int, strings: int) -> None:
-    """Add a binary to the current session."""
+    """Add a binary to the current session (LRU)."""
+    if binary_path in _session_context:
+        _session_context.move_to_end(binary_path)
+    
     _session_context[binary_path] = {
         "hash": file_hash,
         "json_path": json_path,
         "functions": functions,
         "strings": strings
     }
+    
+    # Enforce LRU Limit
+    if len(_session_context) > GHIDRA_SESSION_SIZE:
+        _session_context.popitem(last=False) # Remove oldest
 
 
 def get_from_session(binary_path: str) -> Optional[Dict[str, Any]]:
     """Get session info for a binary."""
-    return _session_context.get(binary_path)
+    if binary_path in _session_context:
+        _session_context.move_to_end(binary_path) # Mark used
+        return _session_context[binary_path]
+    return None
 
 
 def get_all_session_binaries() -> Dict[str, Dict[str, Any]]:
     """Get all binaries in the session."""
-    return _session_context.copy()
+    return dict(_session_context)
 
 
 def clear_session_data() -> int:
@@ -39,15 +103,22 @@ def clear_session_data() -> int:
     return count
 
 
-def load_json_for_binary(binary_path: str) -> Optional[Dict[str, Any]]:
-    """Load cached analysis JSON for a binary in session."""
-    info = _session_context.get(binary_path)
+def load_data_accessor(binary_path: str) -> Optional[DataAccessor]:
+    """Get a DataAccessor for the binary."""
+    info = get_from_session(binary_path)
     if not info:
         return None
     
     json_path = info["json_path"]
     if not os.path.exists(json_path):
         return None
-    
-    with open(json_path, 'r', encoding='utf-8') as f:
-        return json.load(f)
+        
+    return DataAccessor(json_path)
+
+# Legacy compatibility helper (Deprecated but keeps existing tests alive for now)
+def load_json_for_binary(binary_path: str) -> Optional[Dict[str, Any]]:
+    acc = load_data_accessor(binary_path)
+    if not acc: return None
+    # Force load for legacy calls
+    acc._ensure_loaded()
+    return acc._cached_data if acc._cached_data else None

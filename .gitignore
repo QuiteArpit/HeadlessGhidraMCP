@@ -19,3 +19,6 @@ htmlcov/
 
 # Skills/agent config (optional)
 .agent/
+
+# Environment variables
+.env

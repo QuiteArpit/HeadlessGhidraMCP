@@ -10,7 +10,7 @@ from typing import Dict, Any
 
 from .config import (
     BASE_DIR, SCRIPT_DIR, PROJECTS_DIR, CACHE_DIR,
-    GHIDRA_HEADLESS_PATH
+    GHIDRA_HEADLESS_PATH, GHIDRA_SAFE_DIR
 )
 from .cache import get_file_hash, get_cached_analysis, load_index, save_index
 from .session import add_to_session
@@ -18,15 +18,50 @@ from .platform_utils import get_platform_info
 from .response_utils import Timer
 
 
+def validate_path(binary_path: str) -> Dict[str, Any]:
+    """
+    Validate that the binary path is safe to access.
+    Returns error dict if invalid, None if valid.
+    """
+    try:
+        abs_path = os.path.abspath(binary_path)
+        
+        # 1. Existence check
+        if not os.path.exists(abs_path):
+            return {"error": f"File not found: {binary_path}", "code": "FILE_NOT_FOUND"}
+            
+        # 2. Security Check (if GHIDRA_SAFE_DIR is set)
+        if GHIDRA_SAFE_DIR:
+            safe_dir = os.path.abspath(GHIDRA_SAFE_DIR)
+            # Resolve symlinks for strict security
+            real_binary = os.path.realpath(abs_path)
+            real_safe = os.path.realpath(safe_dir)
+            
+            # Use pathlib for clean 'is_relative_to' logic, or string startswith
+            # String check is robust if we ensure trailing slash logic or strict dir containment
+            if not real_binary.startswith(real_safe) or real_binary == real_safe:
+                return {
+                    "error": f"Security Violation: Access denied to {binary_path}. Must be within {GHIDRA_SAFE_DIR}",
+                    "code": "SECURITY_VIOLATION"
+                }
+                
+        return None
+    except Exception as e:
+        return {"error": f"Path validation error: {str(e)}", "code": "PATH_ERROR"}
+
+
 def analyze_single_binary(binary_path: str, force: bool = False) -> Dict[str, Any]:
     """
     Internal function to analyze a single binary.
     Returns dict with status, data, or error.
     """
-    if not os.path.exists(binary_path):
-        return {"error": f"File not found: {binary_path}", "code": "FILE_NOT_FOUND"}
+    # Security & Existence Check
+    validation_error = validate_path(binary_path)
+    if validation_error:
+        return validation_error
 
     # Get file hash
+    binary_path = os.path.abspath(binary_path) # Use abspath for consistency
     file_hash = get_file_hash(binary_path)
     binary_name = os.path.basename(binary_path)
 

@@ -3,21 +3,21 @@ Metadata tools for Ghidra MCP server.
 Functions for querying Imports and Exports.
 """
 from ..server import mcp
-from ..session import load_json_for_binary
+from ..session import load_data_accessor
 from ..response_utils import make_response, make_error
 
 
 @mcp.tool()
 def list_imports(binary_path: str) -> str:
     """List imported libraries and functions."""
-    data = load_json_for_binary(binary_path)
-    if not data:
+    acc = load_data_accessor(binary_path)
+    if not acc:
         return make_error(
             "No analysis found. Run 'analyze_binary' first.",
             code="NO_ANALYSIS"
         )
 
-    imports = data.get('imports', [])
+    imports = acc.get_imports()
     
     # Group by library for cleaner output
     grouped = {}
@@ -39,14 +39,14 @@ def list_imports(binary_path: str) -> str:
 @mcp.tool()
 def list_exports(binary_path: str) -> str:
     """List exported functions (entry points)."""
-    data = load_json_for_binary(binary_path)
-    if not data:
+    acc = load_data_accessor(binary_path)
+    if not acc:
         return make_error(
             "No analysis found. Run 'analyze_binary' first.",
             code="NO_ANALYSIS"
         )
 
-    exports = data.get('exports', [])
+    exports = acc.get_exports()
     
     return make_response(data={
         "binary": binary_path,

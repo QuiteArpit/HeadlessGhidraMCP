@@ -72,3 +72,67 @@ def clear_session() -> str:
         "cleared": count,
         "message": f"Cleared {count} binaries from session"
     })
+
+
+@mcp.tool()
+def scan_folder(folder_path: str) -> str:
+    """
+    List files in a directory with basic metadata (Size, Type).
+    Useful for scouting before analyzing.
+    """
+    # 1. Security Check
+    # We import here to avoid circular dependencies if any (though currently safe)
+    from ..analyzer import validate_path
+    
+    # Check if folder itself is accessible
+    # validate_path checks if path is within SAFE_DIR
+    safety_check = validate_path(folder_path)
+    if safety_check:
+        return make_error(safety_check["error"], code=safety_check["code"])
+
+    if not os.path.isdir(folder_path):
+        return make_error(f"Not a directory: {folder_path}", code="NOT_DIRECTORY")
+
+    files = []
+    try:
+        with os.scandir(folder_path) as it:
+            for entry in it:
+                if entry.name.startswith('.'): continue
+                
+                info = {
+                    "name": entry.name,
+                    "is_dir": entry.is_dir(),
+                    "size_bytes": entry.stat().st_size if entry.is_file() else 0
+                }
+                
+                # Basic Magic Byte Check for Files
+                if entry.is_file():
+                    try:
+                        with open(entry.path, 'rb') as f:
+                            header = f.read(4)
+                            info['magic'] = header.hex()
+                            if header.startswith(b'MZ'):
+                                info['type'] = 'PE (Windows)'
+                            elif header.startswith(b'\x7fELF'):
+                                info['type'] = 'ELF (Linux)'
+                            elif header.startswith(b'\xca\xfe\xba\xbe') or header.startswith(b'\xfe\xed\xfa\xce'):
+                                info['type'] = 'Mach-O (Mac)'
+                            else:
+                                info['type'] = 'Unknown'
+                    except Exception:
+                        info['magic'] = 'error'
+                        info['type'] = 'Unreadable'
+                
+                files.append(info)
+                
+    except PermissionError:
+        return make_error("Permission denied scanning folder", code="PERMISSION_DENIED")
+        
+    # Sort: Directories first, then files
+    files.sort(key=lambda x: (not x['is_dir'], x['name']))
+
+    return make_response(data={
+        "folder": folder_path,
+        "count": len(files),
+        "items": files
+    })

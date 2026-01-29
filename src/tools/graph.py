@@ -4,7 +4,7 @@ Functions for querying function call graphs.
 """
 from typing import List, Dict, Any
 from ..server import mcp
-from ..session import load_json_for_binary
+from ..session import load_data_accessor
 from ..response_utils import make_response, make_error
 
 
@@ -14,15 +14,16 @@ def get_function_callers(binary_path: str, function_name: str) -> str:
     Get list of functions that call the specified function.
     Returns direct callers (parents).
     """
-    data = load_json_for_binary(binary_path)
-    if not data:
+    acc = load_data_accessor(binary_path)
+    if not acc:
         return make_error(
             "No analysis found. Run 'analyze_binary' first.",
             code="NO_ANALYSIS"
         )
 
     target_func = None
-    for f in data.get('functions', []):
+    # Support streaming iterator
+    for f in acc.get_functions():
         if f['name'] == function_name:
             target_func = f
             break
@@ -49,15 +50,15 @@ def get_function_callees(binary_path: str, function_name: str) -> str:
     Get list of functions called by the specified function.
     Returns direct callees (children).
     """
-    data = load_json_for_binary(binary_path)
-    if not data:
+    acc = load_data_accessor(binary_path)
+    if not acc:
         return make_error(
             "No analysis found. Run 'analyze_binary' first.",
             code="NO_ANALYSIS"
         )
 
     target_func = None
-    for f in data.get('functions', []):
+    for f in acc.get_functions():
         if f['name'] == function_name:
             target_func = f
             break

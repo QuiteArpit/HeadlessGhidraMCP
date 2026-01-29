@@ -24,3 +24,13 @@ GHIDRA_HEADLESS_PATH = find_ghidra_path()
 
 # Configure console encoding for cross-platform UTF-8 support
 configure_console_encoding()
+
+# 5. Security Configuration
+GHIDRA_SAFE_DIR = os.getenv("GHIDRA_SAFE_DIR")
+
+# 6. Memory Optimization
+# Max binaries to keep in session metadata cache (LRU)
+GHIDRA_SESSION_SIZE = int(os.getenv("GHIDRA_SESSION_SIZE", "50"))
+
+# File size (MB) threshold to switch from JSON load to streaming (ijson)
+GHIDRA_STREAMING_THRESHOLD_MB = int(os.getenv("GHIDRA_STREAMING_THRESHOLD_MB", "50"))

@@ -23,6 +23,11 @@ Turn Claude into a master reverse engineer. Analyze binaries, extract call graph
 - **Ghidra** 10.x+ ([download](https://ghidra-sre.org/))
 - **Java** 17+ (Required by Ghidra)
 
+### 🤖 Agent Integration Requirements
+If using an AI Agent or MCP Client, ensure it supports:
+- **Long Timeouts**: Set tool execution timeout to >60s (Ghidra analysis takes time).
+- **Notifications**: Support for MCP Progress/Log notifications is recommended for real-time feedback during folder analysis.
+
 ### Install
 
 **Linux / macOS / Windows:**
@@ -99,6 +104,7 @@ python run.py
 | `get_function_callers` | List parents (functions calling target) |
 | `get_function_callees` | List children (functions called by target) |
 | **System** | |
+| `scan_folder` | List files safely with type detection (PE/ELF/Mach-O) |
 | `list_session_binaries` | Show currently loaded/cached binaries |
 | `clear_session` | Clear in-memory session data |
 | `health_check` | Verify Ghidra path and configuration |

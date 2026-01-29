@@ -5,6 +5,7 @@ Binary analysis, folder scanning, batch processing.
 import os
 import glob
 from typing import List
+from mcp.server.fastmcp import Context
 
 from ..server import mcp
 from ..analyzer import analyze_single_binary
@@ -26,7 +27,7 @@ def analyze_binary(binary_path: str, force: bool = False) -> str:
 
 
 @mcp.tool()
-def analyze_folder(folder_path: str, extensions: List[str] = None) -> str:
+def analyze_folder(folder_path: str, extensions: List[str] = None, ctx: Context = None) -> str:
     """
     Analyze all binaries in a folder.
     Default extensions: .exe, .dll, .so, .dylib, .bin, .elf
@@ -37,6 +38,19 @@ def analyze_folder(folder_path: str, extensions: List[str] = None) -> str:
     if extensions is None:
         extensions = [".exe", ".dll", ".so", ".dylib", ".bin", ".elf"]
 
+    # Gather all files first to count total
+    all_files = []
+    for ext in extensions:
+        pattern = os.path.join(folder_path, f"**/*{ext}")
+        all_files.extend(glob.glob(pattern, recursive=True))
+    
+    # Remove duplicates if any extension overlap
+    all_files = sorted(list(set(all_files)))
+    total_files = len(all_files)
+
+    if ctx:
+        ctx.info(f"Found {total_files} files in {folder_path}. Starting analysis...")
+
     results = {
         "folder": folder_path,
         "analyzed": 0,
@@ -45,39 +59,52 @@ def analyze_folder(folder_path: str, extensions: List[str] = None) -> str:
         "binaries": []
     }
 
-    for ext in extensions:
-        pattern = os.path.join(folder_path, f"**/*{ext}")
-        for file_path in glob.glob(pattern, recursive=True):
-            result = analyze_single_binary(file_path)
+    for i, file_path in enumerate(all_files):
+        if ctx:
+            ctx.report_progress(i, total_files)
+            ctx.info(f"[{i+1}/{total_files}] Analyzing: {os.path.basename(file_path)}")
             
-            if "error" in result:
-                results["errors"] += 1
-                results["binaries"].append({
-                    "name": os.path.basename(file_path),
-                    "status": "error",
-                    "error": result["error"]
-                })
-            elif result.get("status") == "cached":
-                results["cached"] += 1
-                results["binaries"].append({
-                    "name": result["binary_name"],
-                    "status": "cached",
-                    "functions": result["functions_count"]
-                })
-            else:
-                results["analyzed"] += 1
-                results["binaries"].append({
-                    "name": result["binary_name"],
-                    "status": "analyzed",
-                    "functions": result["functions_count"]
-                })
+        result = analyze_single_binary(file_path)
+        
+        if "error" in result:
+            results["errors"] += 1
+            results["binaries"].append({
+                "name": os.path.basename(file_path),
+                "status": "error",
+                "error": result["error"]
+            })
+            if ctx: ctx.error(f"Error analyzing {os.path.basename(file_path)}: {result['error']}")
+            
+        elif result.get("status") == "cached":
+            results["cached"] += 1
+            results["binaries"].append({
+                "name": result["binary_name"],
+                "status": "cached",
+                "functions": result["functions_count"]
+            })
+        else:
+            results["analyzed"] += 1
+            results["binaries"].append({
+                "name": result["binary_name"],
+                "status": "analyzed",
+                "functions": result["functions_count"]
+            })
+            if ctx: ctx.info(f"Finished {result['binary_name']}")
+
+    if ctx:
+        ctx.report_progress(total_files, total_files)
+        ctx.info(f"Analysis complete. Processed {total_files} files.")
 
     return make_response(data=results)
 
 
 @mcp.tool()
-def analyze_binaries(binary_paths: List[str]) -> str:
+def analyze_binaries(binary_paths: List[str], ctx: Context = None) -> str:
     """Analyze multiple binaries at once."""
+    total_files = len(binary_paths)
+    if ctx:
+        ctx.info(f"Starting batch analysis of {total_files} binaries...")
+        
     results = {
         "analyzed": 0,
         "cached": 0,
@@ -85,7 +112,11 @@ def analyze_binaries(binary_paths: List[str]) -> str:
         "binaries": []
     }
 
-    for path in binary_paths:
+    for i, path in enumerate(binary_paths):
+        if ctx:
+            ctx.report_progress(i, total_files)
+            ctx.info(f"[{i+1}/{total_files}] Analyzing: {os.path.basename(path)}")
+            
         result = analyze_single_binary(path)
         
         if "error" in result:
@@ -95,6 +126,8 @@ def analyze_binaries(binary_paths: List[str]) -> str:
                 "status": "error",
                 "error": result["error"]
             })
+            if ctx: ctx.error(f"Error analyzing {os.path.basename(path)}: {result['error']}")
+            
         elif result.get("status") == "cached":
             results["cached"] += 1
             results["binaries"].append({
@@ -111,5 +144,10 @@ def analyze_binaries(binary_paths: List[str]) -> str:
                 "status": "analyzed",
                 "functions": result["functions_count"]
             })
+            if ctx: ctx.info(f"Finished {result['binary_name']}")
+    
+    if ctx:
+        ctx.report_progress(total_files, total_files)
+        ctx.info("Batch analysis complete.")
 
     return make_response(data=results)
