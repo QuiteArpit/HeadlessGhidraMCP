@@ -6,13 +6,14 @@ import os
 import glob
 from typing import List
 from mcp.server.fastmcp import Context
+from mcp.types import ToolAnnotations
 
 from ..server import mcp
 from ..analyzer import analyze_single_binary
 from ..response_utils import make_response, make_error
 
 
-@mcp.tool()
+@mcp.tool(annotations=ToolAnnotations(idempotentHint=True))
 def analyze_binary(binary_path: str, force: bool = False) -> str:
     """
     Analyzes a binary using Ghidra and saves the results to a JSON file.
@@ -26,7 +27,7 @@ def analyze_binary(binary_path: str, force: bool = False) -> str:
     return make_response(data=result)
 
 
-@mcp.tool()
+@mcp.tool(annotations=ToolAnnotations(idempotentHint=True))
 def analyze_folder(folder_path: str, extensions: List[str] = None, ctx: Context = None) -> str:
     """
     Analyze all binaries in a folder.
@@ -98,7 +99,7 @@ def analyze_folder(folder_path: str, extensions: List[str] = None, ctx: Context 
     return make_response(data=results)
 
 
-@mcp.tool()
+@mcp.tool(annotations=ToolAnnotations(idempotentHint=True))
 def analyze_binaries(binary_paths: List[str], ctx: Context = None) -> str:
     """Analyze multiple binaries at once."""
     total_files = len(binary_paths)

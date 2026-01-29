@@ -3,12 +3,13 @@ Query tools for Ghidra MCP server.
 Functions for querying analyzed binary data.
 """
 from itertools import islice
+from mcp.types import ToolAnnotations
 from ..server import mcp
 from ..session import load_data_accessor
 from ..response_utils import make_response, make_error
 
 
-@mcp.tool()
+@mcp.tool(annotations=ToolAnnotations(readOnlyHint=True))
 def list_functions(binary_path: str, offset: int = 0, limit: int = 1000) -> str:
     """List all functions found in the analyzed binary."""
     acc = load_data_accessor(binary_path)
@@ -37,7 +38,7 @@ def list_functions(binary_path: str, offset: int = 0, limit: int = 1000) -> str:
     })
 
 
-@mcp.tool()
+@mcp.tool(annotations=ToolAnnotations(readOnlyHint=True))
 def read_function_code(binary_path: str, function_name: str) -> str:
     """Decompile and return the C code for a specific function."""
     acc = load_data_accessor(binary_path)
@@ -62,7 +63,7 @@ def read_function_code(binary_path: str, function_name: str) -> str:
     )
 
 
-@mcp.tool()
+@mcp.tool(annotations=ToolAnnotations(readOnlyHint=True))
 def read_strings(binary_path: str, min_length: int = 5, offset: int = 0, limit: int = 1000) -> str:
     """Extract strings from the analyzed binary."""
     acc = load_data_accessor(binary_path)

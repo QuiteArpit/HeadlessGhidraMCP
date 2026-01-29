@@ -3,12 +3,13 @@ Graph/XRef tools for Ghidra MCP server.
 Functions for querying function call graphs.
 """
 from typing import List, Dict, Any
+from mcp.types import ToolAnnotations
 from ..server import mcp
 from ..session import load_data_accessor
 from ..response_utils import make_response, make_error
 
 
-@mcp.tool()
+@mcp.tool(annotations=ToolAnnotations(readOnlyHint=True))
 def get_function_callers(binary_path: str, function_name: str, offset: int = 0, limit: int = 1000) -> str:
     """
     Get list of functions that call the specified function.
@@ -49,7 +50,7 @@ def get_function_callers(binary_path: str, function_name: str, offset: int = 0, 
     })
 
 
-@mcp.tool()
+@mcp.tool(annotations=ToolAnnotations(readOnlyHint=True))
 def get_function_callees(binary_path: str, function_name: str, offset: int = 0, limit: int = 1000) -> str:
     """
     Get list of functions called by the specified function.

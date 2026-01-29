@@ -2,12 +2,13 @@
 Metadata tools for Ghidra MCP server.
 Functions for querying Imports and Exports.
 """
+from mcp.types import ToolAnnotations
 from ..server import mcp
 from ..session import load_data_accessor
 from ..response_utils import make_response, make_error
 
 
-@mcp.tool()
+@mcp.tool(annotations=ToolAnnotations(readOnlyHint=True))
 def list_imports(binary_path: str, offset: int = 0, limit: int = 1000) -> str:
     """List imported libraries and functions."""
     acc = load_data_accessor(binary_path)
@@ -44,7 +45,7 @@ def list_imports(binary_path: str, offset: int = 0, limit: int = 1000) -> str:
     })
 
 
-@mcp.tool()
+@mcp.tool(annotations=ToolAnnotations(readOnlyHint=True))
 def list_exports(binary_path: str, offset: int = 0, limit: int = 1000) -> str:
     """List exported functions (entry points)."""
     acc = load_data_accessor(binary_path)

@@ -3,6 +3,7 @@ System tools for Ghidra MCP server.
 Health checks, session management, diagnostics.
 """
 import os
+from mcp.types import ToolAnnotations
 
 from ..server import mcp
 from ..config import GHIDRA_HEADLESS_PATH, SCRIPT_DIR, LOGS_DIR
@@ -12,7 +13,7 @@ from ..platform_utils import get_platform_info
 from ..response_utils import make_response, make_error
 
 
-@mcp.tool()
+@mcp.tool(annotations=ToolAnnotations(readOnlyHint=True))
 def health_check() -> str:
     """
     Check MCP server status, Ghidra installation, and platform info.
@@ -43,7 +44,7 @@ def health_check() -> str:
     return make_response(data=response_data)
 
 
-@mcp.tool()
+@mcp.tool(annotations=ToolAnnotations(readOnlyHint=True))
 def list_session_binaries() -> str:
     """List all binaries currently loaded in the session."""
     session = get_all_session_binaries()
@@ -64,7 +65,7 @@ def list_session_binaries() -> str:
     })
 
 
-@mcp.tool()
+@mcp.tool(annotations=ToolAnnotations(destructiveHint=True))
 def clear_session() -> str:
     """Clear the current session (does not delete cached files)."""
     count = clear_session_data()
@@ -74,7 +75,7 @@ def clear_session() -> str:
     })
 
 
-@mcp.tool()
+@mcp.tool(annotations=ToolAnnotations(readOnlyHint=True))
 def scan_folder(folder_path: str) -> str:
     """
     List files in a directory with basic metadata (Size, Type).
