@@ -31,9 +31,8 @@ def setup_venv():
     
     # Create venv if it doesn't exist
     if not os.path.exists(venv_python):
-        log("🔧 Creating virtual environment...")
+        log("[init] Creating venv...")
         subprocess.check_call([sys.executable, "-m", "venv", VENV_DIR])
-        log("✅ Virtual environment created")
     
     # Check if mcp is installed in venv
     try:
@@ -43,11 +42,9 @@ def setup_venv():
         )
         if result.returncode != 0:
             raise ImportError
-        log("✅ Dependencies found")
     except (ImportError, subprocess.CalledProcessError):
-        log("📦 Installing dependencies...")
+        log("[init] Installing dependencies...")
         subprocess.check_call([venv_python, "-m", "pip", "install", "mcp", "-q"])
-        log("✅ Dependencies installed")
     
     return venv_python
 
@@ -57,14 +54,12 @@ def main():
     # If not in venv, setup and re-run with venv Python
     if not in_venv():
         venv_python = setup_venv()
-        log("🚀 Starting Ghidra MCP server...")
-        log("   (Server is now waiting for MCP client connection)")
-        log("   Press Ctrl+C to stop\n")
+        log("[ready] Ghidra MCP server starting")
         os.execv(venv_python, [venv_python, __file__])
     
     # Now running inside venv - start the server
     sys.path.insert(0, SCRIPT_DIR)
-    from src.ghidra_mcp import main as run_server
+    from src.server import main as run_server
     run_server()
 
 if __name__ == "__main__":
