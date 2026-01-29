@@ -20,11 +20,12 @@ class DataAccessor:
     Abstracts access to analysis data (JSON).
     Handles switching between In-Memory Dict (Fast) and Streaming (Low RAM).
     """
-    def __init__(self, json_path: str):
+    def __init__(self, json_path: str, counts: Dict[str, int] = None):
         self.json_path = json_path
         self.file_size_mb = os.path.getsize(json_path) / (1024 * 1024)
         self.use_streaming = self.file_size_mb > GHIDRA_STREAMING_THRESHOLD_MB
         self._cached_data = None
+        self._counts = counts or {}
 
     def _ensure_loaded(self):
         if not self.use_streaming and self._cached_data is None:
@@ -32,8 +33,8 @@ class DataAccessor:
                 self._cached_data = json.load(f)
 
     def get_functions(self) -> Iterator[Dict[str, Any]]:
+        # ... (implementation same as before, simplified slightly if needed, but keeping it robust)
         if self.use_streaming:
-            # Re-open file for streaming scan
             f = open(self.json_path, 'rb')
             return ijson.items(f, 'functions.item')
         else:
@@ -49,7 +50,6 @@ class DataAccessor:
             return iter(self._cached_data.get('strings', []))
             
     def get_imports(self) -> List[Dict[str, Any]]:
-        # Metadata usually small enough to load fully or stream quickly
         if self.use_streaming:
              with open(self.json_path, 'rb') as f:
                 return list(ijson.items(f, 'imports.item'))
@@ -62,19 +62,13 @@ class DataAccessor:
         if self._cached_data:
             return self._cached_data.get('exports', [])
         
-        # Fallback for streaming (though exports usually small)
         with open(self.json_path, 'rb') as f:
             return list(ijson.items(f, 'exports.item'))
 
     def slice_items(self, key: str, offset: int, limit: int) -> List[Dict[str, Any]]:
-        """
-        Get a specific slice of a list (Pagination).
-        """
         if self.use_streaming:
             with open(self.json_path, 'rb') as f:
-                # ijson iterator
                 iterator = ijson.items(f, f'{key}.item')
-                # efficent slice without loading everything
                 return list(islice(iterator, offset, offset + limit))
         else:
             self._ensure_loaded()
@@ -83,23 +77,21 @@ class DataAccessor:
 
     def get_count(self, key: str) -> int:
         """Get total count of items for a key."""
+        # Fast path from session metadata
+        if key in self._counts:
+            return self._counts[key]
+            
         if not self.use_streaming:
             self._ensure_loaded()
             return len(self._cached_data.get(key, []))
         
-        # For streaming, we might have it cached in session context (functions/strings)
-        # But DataAccessor doesn't know about session context directly.
-        # We'll rely on the caller to provide totals if available, 
-        # or fallback to counting (expensive) if needed.
-        # However, for 'imports'/'exports' it's fast enough.
-        # For 'functions', the caller usually has it from session info.
-        # If we absolutely must count:
+        # Fallback: Streaming count (expensive)
         with open(self.json_path, 'rb') as f:
             return sum(1 for _ in ijson.items(f, f'{key}.item'))
 
 
 def add_to_session(binary_path: str, file_hash: str, json_path: str, 
-                   functions: int, strings: int) -> None:
+                   functions: int, strings: int, imports: int = 0, exports: int = 0) -> None:
     """Add a binary to the current session (LRU)."""
     if binary_path in _session_context:
         _session_context.move_to_end(binary_path)
@@ -107,8 +99,12 @@ def add_to_session(binary_path: str, file_hash: str, json_path: str,
     _session_context[binary_path] = {
         "hash": file_hash,
         "json_path": json_path,
-        "functions": functions,
-        "strings": strings
+        "counts": {
+            "functions": functions,
+            "strings": strings,
+            "imports": imports,
+            "exports": exports
+        }
     }
     
     # Enforce LRU Limit
@@ -145,8 +141,19 @@ def load_data_accessor(binary_path: str) -> Optional[DataAccessor]:
     json_path = info["json_path"]
     if not os.path.exists(json_path):
         return None
+    
+    # Pass cached counts if available
+    counts = info.get("counts", {})
+    
+    # Backwards compatibility for session entries created before 'counts' dict
+    # (Though session is volatile, so this is mostly defense in depth)
+    if not counts:
+        counts = {
+            "functions": info.get("functions", 0),
+            "strings": info.get("strings", 0)
+        }
         
-    return DataAccessor(json_path)
+    return DataAccessor(json_path, counts=counts)
 
 # Legacy compatibility helper (Deprecated but keeps existing tests alive for now)
 def load_json_for_binary(binary_path: str) -> Optional[Dict[str, Any]]:

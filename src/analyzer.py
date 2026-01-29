@@ -77,7 +77,9 @@ def analyze_single_binary(binary_path: str, force: bool = False) -> Dict[str, An
                 add_to_session(
                     binary_path, file_hash, cached_path,
                     len(data.get('functions', [])),
-                    len(data.get('strings', []))
+                    len(data.get('strings', [])),
+                    len(data.get('imports', [])),
+                    len(data.get('exports', []))
                 )
                 
                 return {
@@ -193,7 +195,9 @@ def analyze_single_binary(binary_path: str, force: bool = False) -> Dict[str, An
             add_to_session(
                 binary_path, file_hash, cache_path,
                 len(data.get('functions', [])),
-                len(data.get('strings', []))
+                len(data.get('strings', [])),
+                len(data.get('imports', [])),
+                len(data.get('exports', []))
             )
 
             return {

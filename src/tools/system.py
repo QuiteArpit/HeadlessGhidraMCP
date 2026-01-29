@@ -51,12 +51,21 @@ def list_session_binaries() -> str:
     binaries = []
     
     for path, info in session.items():
+        # Helper to get counts safely (handle legacy structure if any)
+        counts = info.get("counts", {})
+        if not counts:
+            # Fallback for old structure
+            counts = {
+                "functions": info.get("functions", 0),
+                "strings": info.get("strings", 0)
+            }
+            
         binaries.append({
             "path": path,
             "name": os.path.basename(path),
             "hash": info["hash"],
-            "functions": info["functions"],
-            "strings": info["strings"]
+            "functions": counts.get("functions", 0),
+            "strings": counts.get("strings", 0)
         })
 
     return make_response(data={

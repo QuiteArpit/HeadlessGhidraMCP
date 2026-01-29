@@ -15,7 +15,7 @@ def test_session_management():
     
     info = session.get_from_session("/tmp/test")
     assert info["hash"] == "hash123"
-    assert info["functions"] == 10
+    assert info["counts"]["functions"] == 10
     
     # Verify listing
     assert "/tmp/test" in session.get_all_session_binaries()
