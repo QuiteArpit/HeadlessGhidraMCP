@@ -13,7 +13,7 @@ TARGETS = {
     "cache": {
         "desc": "__pycache__ directories",
         "paths": ["src/__pycache__", "src/tools/__pycache__", "tests/__pycache__", 
-                  "tests/unit/__pycache__", "tests/integration/__pycache__"]
+                  "tests/unit/__pycache__", "tests/integration/__pycache__", ".pytest_cache"]
     },
     "venv": {
         "desc": "Virtual environment",
