@@ -22,7 +22,9 @@ SAMPLE_DATA = {
 @patch('src.tools.graph.load_data_accessor')
 def test_get_function_callers(mock_load):
     acc = MagicMock()
-    acc.get_functions.return_value = iter(SAMPLE_DATA['functions'])
+    # Use side_effect for multiple iterations if needed, or just standard return if tested once
+    # Current implementation calls get_functions() once.
+    acc.get_functions.side_effect = lambda: iter(SAMPLE_DATA['functions'])
     mock_load.return_value = acc
     
     # Test valid function
@@ -31,13 +33,14 @@ def test_get_function_callers(mock_load):
     
     assert res["data"]["function"] == "main"
     assert res["data"]["callers"] == ["entry"]
-    assert res["data"]["caller_count"] == 1
+    assert res["data"]["total_callers"] == 1
+    assert res["data"]["returned_count"] == 1
 
 
 @patch('src.tools.graph.load_data_accessor')
 def test_get_function_callees(mock_load):
     acc = MagicMock()
-    acc.get_functions.return_value = iter(SAMPLE_DATA['functions'])
+    acc.get_functions.side_effect = lambda: iter(SAMPLE_DATA['functions'])
     mock_load.return_value = acc
     
     # Test valid function
@@ -46,7 +49,8 @@ def test_get_function_callees(mock_load):
     
     assert res["data"]["function"] == "main"
     assert sorted(res["data"]["callees"]) == ["printf", "puts"]
-    assert res["data"]["callee_count"] == 2
+    assert res["data"]["total_callees"] == 2
+    assert res["data"]["returned_count"] == 2
 
 
 @patch('src.tools.graph.load_data_accessor')

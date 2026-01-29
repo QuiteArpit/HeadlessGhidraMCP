@@ -9,7 +9,7 @@ from ..response_utils import make_response, make_error
 
 
 @mcp.tool()
-def get_function_callers(binary_path: str, function_name: str) -> str:
+def get_function_callers(binary_path: str, function_name: str, offset: int = 0, limit: int = 1000) -> str:
     """
     Get list of functions that call the specified function.
     Returns direct callers (parents).
@@ -35,17 +35,22 @@ def get_function_callers(binary_path: str, function_name: str) -> str:
         )
 
     callers = target_func.get('callers', [])
+    total_count = len(callers)
+    paginated_callers = callers[offset : offset + limit]
     
     return make_response(data={
         "binary": binary_path,
         "function": function_name,
-        "caller_count": len(callers),
-        "callers": callers
+        "total_callers": total_count,
+        "returned_count": len(paginated_callers),
+        "offset": offset,
+        "limit": limit,
+        "callers": paginated_callers
     })
 
 
 @mcp.tool()
-def get_function_callees(binary_path: str, function_name: str) -> str:
+def get_function_callees(binary_path: str, function_name: str, offset: int = 0, limit: int = 1000) -> str:
     """
     Get list of functions called by the specified function.
     Returns direct callees (children).
@@ -70,10 +75,15 @@ def get_function_callees(binary_path: str, function_name: str) -> str:
         )
 
     callees = target_func.get('callees', [])
+    total_count = len(callees)
+    paginated_callees = callees[offset : offset + limit]
     
     return make_response(data={
         "binary": binary_path,
         "function": function_name,
-        "callee_count": len(callees),
-        "callees": callees
+        "total_callees": total_count,
+        "returned_count": len(paginated_callees),
+        "offset": offset,
+        "limit": limit,
+        "callees": paginated_callees
     })

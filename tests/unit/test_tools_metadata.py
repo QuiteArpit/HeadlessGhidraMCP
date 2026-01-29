@@ -18,28 +18,34 @@ SAMPLE_DATA = {
 @patch('src.tools.metadata.load_data_accessor')
 def test_list_imports(mock_load):
     acc = MagicMock()
-    # List imports returns a list in DataAccessor
-    acc.get_imports.return_value = SAMPLE_DATA['imports']
+    # List imports uses slice_items now
+    acc.slice_items.return_value = SAMPLE_DATA['imports']
+    acc.get_count.return_value = len(SAMPLE_DATA['imports'])
     mock_load.return_value = acc
     
     res_str = metadata.list_imports("/tmp/bin")
     res = json.loads(res_str)
     
     assert res["data"]["total_imports"] == 3
+    # Pagination defaults: offset=0, limit=1000. So we get all 3.
+    assert res["data"]["returned_count"] == 3
     assert set(res["data"]["libraries"]) == {"KERNEL32.DLL", "USER32.DLL"}
     assert len(res["data"]["imports_by_library"]["KERNEL32.DLL"]) == 2
+
 
 @patch('src.tools.metadata.load_data_accessor')
 def test_list_exports(mock_load):
     acc = MagicMock()
-    # Export returns a list
-    acc.get_exports.return_value = SAMPLE_DATA['exports']
+    # Export returns a list via slice_items
+    acc.slice_items.return_value = SAMPLE_DATA['exports']
+    acc.get_count.return_value = len(SAMPLE_DATA['exports'])
     mock_load.return_value = acc
     
     res_str = metadata.list_exports("/tmp/bin")
     res = json.loads(res_str)
     
     assert res["data"]["total_exports"] == 1
+    assert res["data"]["returned_count"] == 1
     assert res["data"]["exports"][0]["name"] == "start"
 
 @patch('src.tools.metadata.load_data_accessor')

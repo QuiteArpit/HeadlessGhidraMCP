@@ -7,6 +7,7 @@ import json
 import ijson # type: ignore
 from typing import Dict, Any, Optional, Iterator, Union, List
 from collections import OrderedDict
+from itertools import islice
 
 from .config import GHIDRA_SESSION_SIZE, GHIDRA_STREAMING_THRESHOLD_MB
 
@@ -57,12 +58,44 @@ class DataAccessor:
             return self._cached_data.get('imports', [])
 
     def get_exports(self) -> List[Dict[str, Any]]:
+        self._ensure_loaded()
+        if self._cached_data:
+            return self._cached_data.get('exports', [])
+        
+        # Fallback for streaming (though exports usually small)
+        with open(self.json_path, 'rb') as f:
+            return list(ijson.items(f, 'exports.item'))
+
+    def slice_items(self, key: str, offset: int, limit: int) -> List[Dict[str, Any]]:
+        """
+        Get a specific slice of a list (Pagination).
+        """
         if self.use_streaming:
-             with open(self.json_path, 'rb') as f:
-                return list(ijson.items(f, 'exports.item'))
+            with open(self.json_path, 'rb') as f:
+                # ijson iterator
+                iterator = ijson.items(f, f'{key}.item')
+                # efficent slice without loading everything
+                return list(islice(iterator, offset, offset + limit))
         else:
             self._ensure_loaded()
-            return self._cached_data.get('exports', [])
+            data_list = self._cached_data.get(key, [])
+            return data_list[offset : offset + limit]
+
+    def get_count(self, key: str) -> int:
+        """Get total count of items for a key."""
+        if not self.use_streaming:
+            self._ensure_loaded()
+            return len(self._cached_data.get(key, []))
+        
+        # For streaming, we might have it cached in session context (functions/strings)
+        # But DataAccessor doesn't know about session context directly.
+        # We'll rely on the caller to provide totals if available, 
+        # or fallback to counting (expensive) if needed.
+        # However, for 'imports'/'exports' it's fast enough.
+        # For 'functions', the caller usually has it from session info.
+        # If we absolutely must count:
+        with open(self.json_path, 'rb') as f:
+            return sum(1 for _ in ijson.items(f, f'{key}.item'))
 
 
 def add_to_session(binary_path: str, file_hash: str, json_path: str, 

@@ -9,7 +9,7 @@ from ..response_utils import make_response, make_error
 
 
 @mcp.tool()
-def list_functions(binary_path: str, limit: int = 300) -> str:
+def list_functions(binary_path: str, offset: int = 0, limit: int = 1000) -> str:
     """List all functions found in the analyzed binary."""
     acc = load_data_accessor(binary_path)
     if not acc:
@@ -18,27 +18,20 @@ def list_functions(binary_path: str, limit: int = 300) -> str:
             code="NO_ANALYSIS"
         )
 
-    # Use islice for efficient streaming limit
-    # Note: total_count might not be available accurately in streaming mode without full scan
-    # But usually session metadata has 'functions' count!
-    # acc._cached_data might be None. session info has the count.
-    # We can get total count from session.get_from_session(binary_path) if needed, 
-    # but let's just return what we have or accept that total_count is nice-to-have.
-    # Actually, session metadata DOES store function count. Let's assume we can get it from there if we really want,
-    # or just omit it / set to -1 if unknown in stream.
-    # For now, let's just grab the items.
-    
-    func_iter = acc.get_functions()
-    limited_funcs = list(islice(func_iter, limit))
+    # Use slice_items (paginated access)
+    functions = acc.slice_items('functions', offset, limit)
+    total_estimated = acc.get_count('functions')
     
     func_list = [
         {"name": f['name'], "address": f['entry']}
-        for f in limited_funcs
+        for f in functions
     ]
 
     return make_response(data={
         "binary": binary_path,
+        "total_functions": total_estimated,
         "returned_count": len(func_list),
+        "offset": offset,
         "limit": limit,
         "functions": func_list
     })
@@ -70,7 +63,7 @@ def read_function_code(binary_path: str, function_name: str) -> str:
 
 
 @mcp.tool()
-def read_strings(binary_path: str, min_length: int = 5, limit: int = 100) -> str:
+def read_strings(binary_path: str, min_length: int = 5, offset: int = 0, limit: int = 1000) -> str:
     """Extract strings from the analyzed binary."""
     acc = load_data_accessor(binary_path)
     if not acc:
@@ -79,28 +72,24 @@ def read_strings(binary_path: str, min_length: int = 5, limit: int = 100) -> str
             code="NO_ANALYSIS"
         )
 
-    # Streaming filter
-    string_iter = acc.get_strings()
+    # Filter generator
+    filtered_strings = (
+        {
+            "value": s['value'], 
+            "address": s.get('address', 'unknown')
+        }
+        for s in acc.get_strings()
+        if len(s.get('value', '')) > min_length
+    )
     
-    # We need to filter by length AND limit count.
-    # itertools.islice consumes, so we filter first.
-    filtered_strings = []
-    count = 0
-    
-    for s in string_iter:
-        if len(s.get('value', '')) > min_length:
-            filtered_strings.append({
-                "value": s['value'], 
-                "address": s.get('address', 'unknown')
-            })
-            count += 1
-            if count >= limit:
-                break
+    # Paginate filtered results
+    page_items = list(islice(filtered_strings, offset, offset + limit))
                 
     return make_response(data={
         "binary": binary_path,
-        "returned_count": len(filtered_strings),
+        "returned_count": len(page_items),
         "min_length": min_length,
+        "offset": offset,
         "limit": limit,
-        "strings": filtered_strings
+        "strings": page_items
     })
