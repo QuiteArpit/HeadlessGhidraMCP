@@ -6,9 +6,19 @@ This module provides OS detection and Ghidra path resolution for Windows and Lin
 import os
 import sys
 import platform
+import shutil
+import time
+import stat
+import logging
 from pathlib import Path
-from typing import Optional
+from typing import Optional, Dict, Any, Union
 
+logger = logging.getLogger(__name__)
+
+# OS Checks
+IS_WINDOWS = sys.platform == "win32"
+IS_MACOS = sys.platform == "darwin"
+IS_LINUX = sys.platform.startswith("linux")
 
 def get_os_name() -> str:
     """Returns 'windows', 'linux', or 'darwin' (macOS)."""
@@ -17,7 +27,7 @@ def get_os_name() -> str:
 
 def is_windows() -> bool:
     """Check if running on Windows."""
-    return sys.platform == "win32"
+    return IS_WINDOWS
 
 
 def get_ghidra_executable_name() -> str:
@@ -110,3 +120,106 @@ def get_platform_info() -> dict:
         "is_windows": is_windows(),
         "ghidra_executable": get_ghidra_executable_name(),
     }
+
+
+# --- ROBUST FILE OPERATIONS & SECURITY ---
+
+def validate_safe_path(binary_path: str, safe_dir: Optional[str] = None) -> Optional[Dict[str, Any]]:
+    """
+    Validate that the binary path is safe to access (prevents directory traversal).
+    
+    Args:
+        binary_path: The file path to check.
+        safe_dir: The directory restriction (optional). If None, checks file existence only.
+        
+    Returns:
+        None if valid, or a dictionary {"error": "...", "code": "..."} if invalid.
+    """
+    try:
+        abs_path = os.path.abspath(binary_path)
+        
+        # 1. Existence check
+        if not os.path.exists(abs_path):
+            return {"error": f"File not found: {binary_path}", "code": "FILE_NOT_FOUND"}
+            
+        # 2. Security Check
+        if safe_dir:
+            real_safe = os.path.realpath(os.path.abspath(safe_dir))
+            real_binary = os.path.realpath(abs_path)
+            
+            # Normalize for Windows case-insensitivity
+            if is_windows():
+                real_safe = os.path.normcase(real_safe)
+                real_binary = os.path.normcase(real_binary)
+            
+            # Use strict commonpath check
+            try:
+                common = os.path.commonpath([real_binary, real_safe])
+            except ValueError:
+                # Can happen on Windows if paths are on different drives
+                return {
+                    "error": f"Access denied: {binary_path} (Different drive than safe directory)",
+                    "code": "SECURITY_VIOLATION"
+                }
+
+            if common != real_safe:
+                return {
+                    "error": f"Security Violation: Access denied to {binary_path}. Must be within {safe_dir}",
+                    "code": "SECURITY_VIOLATION"
+                }
+                
+        return None
+    except Exception as e:
+        return {"error": f"Path validation error: {str(e)}", "code": "PATH_ERROR"}
+
+
+def _on_rm_error(func, path, exc_info):
+    """
+    Error handler for shutil.rmtree.
+    If the error is due to an access error (read only file),
+    it attempts to add write permission and then retries.
+    If the error is because the file is in use, it waits a bit and retries.
+    """
+    # Check if access denied
+    if not os.access(path, os.W_OK):
+        # Is the error an access error?
+        os.chmod(path, stat.S_IWUSR)
+        try:
+            func(path)
+            return
+        except Exception:
+            pass
+    
+    # Simple retry for file locking issues
+    time.sleep(0.1)
+    try:
+        func(path)
+    except Exception as e:
+        logger.warning(f"Failed to remove {path}: {e}")
+
+
+def robust_rmtree(path: str) -> None:
+    """
+    Robustly remove a directory tree, handling Windows read-only files and locks.
+    """
+    if os.path.exists(path):
+        shutil.rmtree(path, onerror=_on_rm_error)
+
+
+def robust_move(src: str, dst: str, retries: int = 3) -> None:
+    """
+    Robustly move a file, handling potential temporary locks.
+    """
+    for i in range(retries):
+        try:
+            if os.path.exists(dst):
+                os.remove(dst)
+            shutil.move(src, dst)
+            return
+        except PermissionError:
+            if i < retries - 1:
+                time.sleep(0.2 * (i + 1))
+            else:
+                raise
+        except Exception:
+            raise

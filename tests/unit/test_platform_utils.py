@@ -20,19 +20,15 @@ class TestIsWindows:
     """Tests for is_windows()"""
     
     def test_returns_true_on_windows(self):
-        with patch("sys.platform", "win32"):
-            # Need to reimport to pick up the patched value
-            from src.platform_utils import is_windows as patched_is_windows
-            # Since is_windows uses sys.platform directly, we need to patch at module level
-            with patch("src.platform_utils.sys.platform", "win32"):
-                assert is_windows() is True
+        with patch("src.platform_utils.IS_WINDOWS", True):
+            assert is_windows() is True
     
     def test_returns_false_on_linux(self):
-        with patch("src.platform_utils.sys.platform", "linux"):
+        with patch("src.platform_utils.IS_WINDOWS", False):
             assert is_windows() is False
     
     def test_returns_false_on_darwin(self):
-        with patch("src.platform_utils.sys.platform", "darwin"):
+        with patch("src.platform_utils.IS_WINDOWS", False):
             assert is_windows() is False
 
 

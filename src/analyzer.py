@@ -14,40 +14,8 @@ from .config import (
 )
 from .cache import get_file_hash, get_cached_analysis, load_index, save_index
 from .session import add_to_session
-from .platform_utils import get_platform_info
+from .platform_utils import get_platform_info, validate_safe_path, robust_rmtree, robust_move
 from .response_utils import Timer
-
-
-def validate_path(binary_path: str) -> Dict[str, Any]:
-    """
-    Validate that the binary path is safe to access.
-    Returns error dict if invalid, None if valid.
-    """
-    try:
-        abs_path = os.path.abspath(binary_path)
-        
-        # 1. Existence check
-        if not os.path.exists(abs_path):
-            return {"error": f"File not found: {binary_path}", "code": "FILE_NOT_FOUND"}
-            
-        # 2. Security Check (if GHIDRA_SAFE_DIR is set)
-        if GHIDRA_SAFE_DIR:
-            safe_dir = os.path.abspath(GHIDRA_SAFE_DIR)
-            # Resolve symlinks for strict security
-            real_binary = os.path.realpath(abs_path)
-            real_safe = os.path.realpath(safe_dir)
-            
-            # Use pathlib for clean 'is_relative_to' logic, or string startswith
-            # String check is robust if we ensure trailing slash logic or strict dir containment
-            if not real_binary.startswith(real_safe) or real_binary == real_safe:
-                return {
-                    "error": f"Security Violation: Access denied to {binary_path}. Must be within {GHIDRA_SAFE_DIR}",
-                    "code": "SECURITY_VIOLATION"
-                }
-                
-        return None
-    except Exception as e:
-        return {"error": f"Path validation error: {str(e)}", "code": "PATH_ERROR"}
 
 
 def analyze_single_binary(binary_path: str, force: bool = False) -> Dict[str, Any]:
@@ -56,7 +24,7 @@ def analyze_single_binary(binary_path: str, force: bool = False) -> Dict[str, An
     Returns dict with status, data, or error.
     """
     # Security & Existence Check
-    validation_error = validate_path(binary_path)
+    validation_error = validate_safe_path(binary_path, GHIDRA_SAFE_DIR)
     if validation_error:
         return validation_error
 
@@ -113,7 +81,7 @@ def analyze_single_binary(binary_path: str, force: bool = False) -> Dict[str, An
     
     # Clean verification: If force=True, remove existing project to ensure fresh analysis
     if force and os.path.exists(proj_dir):
-        shutil.rmtree(proj_dir, ignore_errors=True)
+        robust_rmtree(proj_dir)
     
     os.makedirs(proj_dir, exist_ok=True)
 
@@ -180,7 +148,7 @@ def analyze_single_binary(binary_path: str, force: bool = False) -> Dict[str, An
             # Rename to hash-based name for caching
             cache_path = os.path.join(CACHE_DIR, f"{file_hash}.json")
             if generated_json_path != cache_path:
-                shutil.move(generated_json_path, cache_path)
+                robust_move(generated_json_path, cache_path)
             
             # Load data
             with open(cache_path, 'r', encoding='utf-8') as f:

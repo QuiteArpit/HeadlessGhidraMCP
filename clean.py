@@ -6,6 +6,8 @@ Removes cached files, virtual environment, and analysis output.
 import argparse
 import shutil
 import os
+import stat
+import time
 
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 
@@ -37,6 +39,30 @@ def get_size(path):
                     pass
     return total / (1024 * 1024)
 
+def _on_rm_error(func, path, exc_info):
+    """
+    Error handler for shutil.rmtree.
+    If the error is due to an access error (read only file),
+    it attempts to add write permission and then retries.
+    If the error is because the file is in use, it waits a bit and retries.
+    """
+    # Check if access denied
+    if not os.access(path, os.W_OK):
+        # Is the error an access error?
+        os.chmod(path, stat.S_IWUSR)
+        try:
+            func(path)
+            return
+        except Exception:
+            pass
+    
+    # Simple retry for file locking issues
+    time.sleep(0.1)
+    try:
+        func(path)
+    except Exception as e:
+        print(f"    [warn] Failed to remove {path}: {e}")
+
 def clean(targets, dry_run=False):
     """Clean specified targets."""
     for target in targets:
@@ -54,7 +80,7 @@ def clean(targets, dry_run=False):
                 if dry_run:
                     print(f"  Would delete: {rel_path} ({size:.2f} MB)")
                 else:
-                    shutil.rmtree(full_path, ignore_errors=True)
+                    shutil.rmtree(full_path, onerror=_on_rm_error)
                     print(f"  Deleted: {rel_path} ({size:.2f} MB)")
             else:
                 print(f"  Skipped: {rel_path} (not found)")

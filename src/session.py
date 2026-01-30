@@ -35,19 +35,19 @@ class DataAccessor:
     def get_functions(self) -> Iterator[Dict[str, Any]]:
         # ... (implementation same as before, simplified slightly if needed, but keeping it robust)
         if self.use_streaming:
-            f = open(self.json_path, 'rb')
-            return ijson.items(f, 'functions.item')
+            with open(self.json_path, 'rb') as f:
+                yield from ijson.items(f, 'functions.item')
         else:
             self._ensure_loaded()
-            return iter(self._cached_data.get('functions', []))
+            yield from self._cached_data.get('functions', [])
 
     def get_strings(self) -> Iterator[Dict[str, Any]]:
         if self.use_streaming:
-            f = open(self.json_path, 'rb')
-            return ijson.items(f, 'strings.item')
+            with open(self.json_path, 'rb') as f:
+                yield from ijson.items(f, 'strings.item')
         else:
             self._ensure_loaded()
-            return iter(self._cached_data.get('strings', []))
+            yield from self._cached_data.get('strings', [])
             
     def get_imports(self) -> List[Dict[str, Any]]:
         if self.use_streaming:

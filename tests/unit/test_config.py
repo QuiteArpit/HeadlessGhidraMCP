@@ -5,7 +5,7 @@ from src import config
 def test_base_dir_structure():
     """Verify that essential directories are defined relative to BASE_DIR"""
     assert os.path.isdir(config.BASE_DIR)
-    assert config.SCRIPT_DIR.endswith("scripts/ghidra")
+    assert config.SCRIPT_DIR.endswith(os.path.join("scripts", "ghidra"))
     assert config.LOGS_DIR.endswith("analysis_output")
 
 def test_ghidra_path_detection():

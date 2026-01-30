@@ -13,6 +13,7 @@ from capstone import Cs, CS_ARCH_X86, CS_MODE_64, CS_MODE_32, CS_ARCH_ARM, CS_MO
 from elftools.elf.elffile import ELFFile
 
 from ..config import GHIDRA_SAFE_DIR
+from ..platform_utils import validate_safe_path
 
 # Tool Annotations
 readOnlyHint = True
@@ -20,23 +21,6 @@ idempotentHint = True
 
 logger = logging.getLogger(__name__)
 
-# --- Helper: Security ---
-def validate_path(binary_path: str) -> Optional[Dict[str, Any]]:
-    """Strict path validation reusing existing logic."""
-    try:
-        abs_path = os.path.abspath(binary_path)
-        if not os.path.exists(abs_path):
-            return {"error": f"File not found: {binary_path}"}
-        
-        if GHIDRA_SAFE_DIR:
-            safe_dir = os.path.abspath(GHIDRA_SAFE_DIR)
-            real_binary = os.path.realpath(abs_path)
-            real_safe = os.path.realpath(safe_dir)
-            if not real_binary.startswith(real_safe) or real_binary == real_safe:
-                return {"error": f"Access denied: {binary_path}"}
-        return None
-    except Exception as e:
-        return {"error": str(e)}
 
 # --- TOOL 1: search_strings (Grep) ---
 def search_strings(binary_path: str, pattern: str, min_length: int = 4) -> List[Dict[str, Any]]:
@@ -44,7 +28,7 @@ def search_strings(binary_path: str, pattern: str, min_length: int = 4) -> List[
     Search for strings matching a regex pattern in the binary file.
     Uses mmap for high speed O(n) scanning.
     """
-    err = validate_path(binary_path)
+    err = validate_safe_path(binary_path, GHIDRA_SAFE_DIR)
     if err: return [err]
 
     results = []
@@ -75,7 +59,7 @@ def read_bytes(binary_path: str, offset: int, length: int) -> Dict[str, Any]:
     Read raw bytes from the binary at specified offset.
     Returns hex string.
     """
-    err = validate_path(binary_path)
+    err = validate_safe_path(binary_path, GHIDRA_SAFE_DIR)
     if err: return err
 
     if length > 1024:
@@ -99,7 +83,7 @@ def list_sections(binary_path: str) -> List[Dict[str, Any]]:
     """
     List binary sections using pefile (Windows) or pyelftools (Linux).
     """
-    err = validate_path(binary_path)
+    err = validate_safe_path(binary_path, GHIDRA_SAFE_DIR)
     if err: return [err]
 
     results = []
@@ -145,7 +129,7 @@ def disassemble_preview(binary_path: str, offset: int, length: int = 64, arch: s
     Disassemble a small chunk of bytes using Capstone.
     Supported architectures: x86, x64, arm, thumb.
     """
-    err = validate_path(binary_path)
+    err = validate_safe_path(binary_path, GHIDRA_SAFE_DIR)
     if err: return [err]
 
     try:

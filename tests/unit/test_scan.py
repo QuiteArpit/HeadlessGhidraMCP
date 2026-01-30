@@ -13,7 +13,8 @@ def mock_scandir(tmp_path):
     return str(tmp_path)
 
 def test_scan_folder(mock_scandir):
-    with patch("src.analyzer.GHIDRA_SAFE_DIR", None): # Disable safety check for test
+    # Patch GHIDRA_SAFE_DIR in src.config since src.tools.system imports it from there
+    with patch("src.config.GHIDRA_SAFE_DIR", None): 
         response = scan_folder(mock_scandir)
         assert '"status": "success"' in response
         assert '"test.exe"' in response

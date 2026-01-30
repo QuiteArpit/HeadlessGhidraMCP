@@ -10,7 +10,8 @@ from unittest.mock import MagicMock, patch, mock_open
 from src.tools import inspection
 
 # --- Test: search_strings ---
-def test_search_strings_found():
+@patch("src.tools.inspection.validate_safe_path", return_value=None)
+def test_search_strings_found(mock_val):
     # Mock file content with "password" inside
     content = b"user=admin\npassword=secret\n"
     
@@ -37,7 +38,8 @@ def test_search_strings_found():
     # Alternative: Create a real temp file for reliable mmap testing
     pass
 
-def test_search_strings_real_file(tmp_path):
+@patch("src.tools.inspection.validate_safe_path", return_value=None)
+def test_search_strings_real_file(mock_val, tmp_path):
     f = tmp_path / "test.bin"
     f.write_bytes(b"some_junk_data_flag{found_me}_more_junk_password123")
     
@@ -46,7 +48,8 @@ def test_search_strings_real_file(tmp_path):
     assert results[0]["value"] == "flag{found_me}"
 
 # --- Test: read_bytes ---
-def test_read_bytes_valid(tmp_path):
+@patch("src.tools.inspection.validate_safe_path", return_value=None)
+def test_read_bytes_valid(mock_val, tmp_path):
     f = tmp_path / "test.bin"
     f.write_bytes(b"\xAA\xBB\xCC\xDD" * 10)
     
@@ -54,7 +57,8 @@ def test_read_bytes_valid(tmp_path):
     assert res["hex"] == "aabbccdd"
     assert res["length"] == 4
 
-def test_read_bytes_too_large(tmp_path):
+@patch("src.tools.inspection.validate_safe_path", return_value=None)
+def test_read_bytes_too_large(mock_val, tmp_path):
     f = tmp_path / "test.bin"
     f.touch()
     res = inspection.read_bytes(str(f), 0, 2048)
@@ -63,7 +67,8 @@ def test_read_bytes_too_large(tmp_path):
 
 # --- Test: list_sections (PE) ---
 @patch("pefile.PE")
-def test_list_sections_pe(mock_pe_cls, tmp_path):
+@patch("src.tools.inspection.validate_safe_path", return_value=None)
+def test_list_sections_pe(mock_val, mock_pe_cls, tmp_path):
     f = tmp_path / "fake.exe"
     f.touch()
     
@@ -84,7 +89,8 @@ def test_list_sections_pe(mock_pe_cls, tmp_path):
     assert res[0]["entropy"] == 6.5
 
 # --- Test: disassemble_preview ---
-def test_disassemble_preview_x64(tmp_path):
+@patch("src.tools.inspection.validate_safe_path", return_value=None)
+def test_disassemble_preview_x64(mock_val, tmp_path):
     f = tmp_path / "code.bin"
     # NOP, RET
     f.write_bytes(b"\x90\xC3")

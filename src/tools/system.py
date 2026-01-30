@@ -92,11 +92,12 @@ def scan_folder(folder_path: str) -> str:
     """
     # 1. Security Check
     # We import here to avoid circular dependencies if any (though currently safe)
-    from ..analyzer import validate_path
+    from ..platform_utils import validate_safe_path
+    from ..config import GHIDRA_SAFE_DIR
     
     # Check if folder itself is accessible
-    # validate_path checks if path is within SAFE_DIR
-    safety_check = validate_path(folder_path)
+    # validate_safe_path checks if path is within SAFE_DIR
+    safety_check = validate_safe_path(folder_path, GHIDRA_SAFE_DIR)
     if safety_check:
         return make_error(safety_check["error"], code=safety_check["code"])
 
