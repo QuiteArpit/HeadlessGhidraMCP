@@ -50,31 +50,34 @@ def main():
     
     # 3. Install Dependencies
     print("\nInstalling dependencies...")
-    
-    # Determine pip command path inside venv
+
+    # Determine executable paths inside venv for cross-platform support
     if os.name == "nt":
-        pip_cmd = os.path.join(venv_dir, "Scripts", "pip")
+        pip_cmd = os.path.join(venv_dir, "Scripts", "pip.exe")
+        python_cmd = os.path.join(venv_dir, "Scripts", "python.exe")
     else:
         pip_cmd = os.path.join(venv_dir, "bin", "pip")
-    
+        python_cmd = os.path.join(venv_dir, "bin", "python")
+
     if has_uv:
-        # Use uv pip for speed if installed, but targeting the venv
-        # uv pip install -p .venv -e ".[dev]"
-        # Note: uv syntax might vary, safest is to activate or use python path.
-        # Let's stick to standard pip executable inside venv to be safe, unless user wants speed.
-        # Actually, if we used uv venv, we can use 'uv pip install' easily.
-        install_cmd = f"source {venv_dir}/bin/activate && uv pip install -e \".[dev]\""
-        # We need shell=True for source
-        if not run_command(install_cmd, shell=True):
-             print("Fallback to standard pip...")
-             run_command([pip_cmd, "install", "-e", ".[dev]"])
+        print("Using 'uv' for dependency installation.")
+        # Using the venv's python interpreter is a robust way to ensure installation
+        # in the correct environment without activation scripts.
+        install_cmd = ["uv", "pip", "install", "--python", python_cmd, "-e", ".[dev]"]
+        if not run_command(install_cmd):
+            print("'uv' installation failed. Please check your setup or report the issue.")
+            sys.exit(1)
     else:
+        print("Using 'pip' for dependency installation.")
         run_command([pip_cmd, "install", "--upgrade", "pip"])
         run_command([pip_cmd, "install", "-e", ".[dev]"])
         
     print("\n=== Setup Complete! ===")
     print("\nTo start using the project:")
-    print(f"  source {venv_dir}/bin/activate")
+    if os.name == 'nt':
+        print(f"  .\\{venv_dir}\\Scripts\\activate")
+    else:
+        print(f"  source {venv_dir}/bin/activate")
     print("  ghidra-mcp")
     print("\nTo run tests:")
     print("  pytest")
