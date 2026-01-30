@@ -9,6 +9,7 @@ Turn Claude into a master reverse engineer. Analyze binaries, extract call graph
 ## ⚡ Features
 
 - **Deep Analysis**: Decompilation, Strings, Functions, Imports, Exports.
+- **High-Performance Inspection**: Fast string search, hex dumping, and basic disassembly (without Ghidra).
 - **Call Graph**: Inspect Function Callers (parents) and Callees (children).
 - **Zero-Config**: Auto-detects Ghidra installation.
 - **Robust**: Caching, persistence, and auto-cleanup of temporary projects.
@@ -23,20 +24,15 @@ Turn Claude into a master reverse engineer. Analyze binaries, extract call graph
 - **Ghidra** 10.x+ ([download](https://ghidra-sre.org/))
 - **Java** 17+ (Required by Ghidra)
 
-### 🤖 Agent Integration Requirements
-If using an AI Agent or MCP Client, ensure it supports:
-- **Long Timeouts**: Set tool execution timeout to >60s (Ghidra analysis takes time).
-- **Notifications**: Support for MCP Progress/Log notifications is recommended for real-time feedback during folder analysis.
-
 ### Install
 
 **Linux / macOS / Windows:**
 ```bash
 git clone https://github.com/QuiteArpit/HeadlessGhidraMCP.git
 cd HeadlessGhidraMCP
-python run.py
+python setup_project.py
 ```
-*First run automatically creates a virtual environment and installs dependencies.*
+*`setup_project.py` automatically handles environment creation, dependencies, and build logic.*
 
 ### 🔌 Connect to Claude Desktop
 
@@ -45,8 +41,8 @@ python run.py
 {
   "mcpServers": {
     "ghidra-analyst": {
-      "command": "python",
-      "args": ["/absolute/path/to/HeadlessGhidraMCP/run.py"]
+      "command": "/absolute/path/to/HeadlessGhidraMCP/.venv/bin/ghidra-mcp",
+      "args": []
     }
   }
 }
@@ -57,8 +53,8 @@ python run.py
 {
   "mcpServers": {
     "ghidra-analyst": {
-      "command": "python",
-      "args": ["C:\\Users\\YOU\\HeadlessGhidraMCP\\run.py"]
+      "command": "C:\\Users\\YOU\\HeadlessGhidraMCP\\.venv\\Scripts\\ghidra-mcp.exe",
+      "args": []
     }
   }
 }
@@ -69,20 +65,17 @@ python run.py
 
 ## 🎯 Usage Examples
 
-**1. Basic Analysis**
+**1. Rapid Recon (Fast)**
+> "Search for 'password' strings in `/path/to/malware.exe`"
+> "Show me the first 64 bytes of the binary"
+
+**2. Deep Analysis (Ghidra)**
 > "Analyze `/path/to/malware.exe`"
-
-**2. Explore Structure**
-> "List imports using `list_imports`"
-> "Show exported functions"
-
-**3. Deep Dive**
 > "Decompile `main` function"
 > "Who calls `main`? Use `get_function_callers`"
-> "What does `main` call? Use `get_function_callees`"
 
-**4. Diagnostics**
-> "Run `health_check`"
+**3. Batch Processing**
+> "Analyze all .exe files in `/malware_samples`"
 
 ---
 
@@ -90,14 +83,19 @@ python run.py
 
 | Tool | Description |
 |------|-------------|
-| **Analysis** | |
+| **Inspection (Fast)** | *Native Python tools (No Ghidra overhead)* |
+| `search_strings` | Find strings (regex supported) in binary |
+| `read_bytes` | Read raw bytes (hexdump) from file |
+| `disassemble_preview` | Quick disassembly of instructions at offset |
+| `list_sections` | Show PE/ELF sections and entropy |
+| **Analysis** | *Powered by Ghidra Headless* |
 | `analyze_binary` | Analyze a single binary (Cached) |
 | `analyze_binaries` | Batch analyze multiple binaries |
 | `analyze_folder` | Recursively analyze a directory |
 | **Query** | |
 | `list_functions` | List functions (names, addresses) |
 | `read_function_code` | Decompile C code for a function |
-| `read_strings` | Extract ASCII strings |
+| `read_strings` | Extract analysis strings (from Ghidra) |
 | **Graph & Metadata** | |
 | `list_imports` | List imported libraries/functions |
 | `list_exports` | List exported entry points |
@@ -111,37 +109,22 @@ python run.py
 
 ---
 
-## ⚙️ Configuration
-
-Ghidra path is **auto-detected**. To override:
-
-**Linux/macOS:**
-```bash
-export GHIDRA_HEADLESS_PATH="/opt/ghidra/support/analyzeHeadless"
-```
-
-**Windows PowerShell:**
-```powershell
-$env:GHIDRA_HEADLESS_PATH = "C:\ghidra\support\analyzeHeadless.bat"
-```
-
----
-
 ## 🧪 Development & Testing
 
 This project includes a comprehensive test suite.
 
 ```bash
-# specialized dev install
-python -m venv .venv
+# Activate environment
 source .venv/bin/activate
-pip install -e ".[dev]"
 
 # Run all tests
-pytest -v tests/
+pytest
 
-# Run specific suite
-pytest -v tests/integration/  # Requires Ghidra
+# Run fast unit tests only
+pytest tests/unit
+
+# Run full integration tests (requires Ghidra)
+pytest tests/integration
 ```
 
 ---
@@ -151,14 +134,11 @@ pytest -v tests/integration/  # Requires Ghidra
 The system caches analysis results and creates temporary Ghidra projects. To save disk space:
 
 ```bash
-# Clean everything (cache + projs + pycache + venv)
+# Clean cache & output logs (Keeps virtual environment)
+python clean.py
+
+# Clean EVERYTHING (Including .venv)
 python clean.py --all
-
-# Clean only projects and cache
-python clean.py --output
-
-# Clean only cache
-python clean.py --cache
 ```
 
 ---
@@ -167,8 +147,8 @@ python clean.py --cache
 
 ```text
 HeadlessGhidraMCP/
-├── run.py                 # Application entry point
-├── clean.py               # Utility to clean cache/projects
+├── setup_project.py       # One-click Setup Script
+├── clean.py               # Cleanup Utility
 ├── pyproject.toml         # Dependencies & Build Config
 ├── pytest.ini             # Test Config
 ├── readme.md              # Documentation
@@ -178,30 +158,15 @@ HeadlessGhidraMCP/
 │   ├── analyzer.py        # Analysis Engine & Ghidra Wrapper
 │   ├── session.py         # In-memory State Management
 │   ├── cache.py           # Persistence & Hashing Logic
-│   ├── config.py          # Paths & Constants
-│   ├── platform_utils.py  # OS Detection utilities
 │   └── tools/             # MCP Tool Implementations
-│       ├── analysis.py    # Core analysis tools
+│       ├── analysis.py    # Core analysis (BatchProcessor)
+│       ├── inspection.py  # Fast static analysis tools
 │       ├── query.py       # Decompilation & string tools
 │       ├── graph.py       # Call graph tools (XRefs)
-│       ├── metadata.py    # Imports/Exports tools
-│       └── system.py      # Health checks & session tools
+│       └── ...
 ├── scripts/ghidra/        # Java Scripts (Run inside Ghidra)
 │   └── GhidraDataDump.java # Main extraction logic
 └── tests/                 # Comprehensive Test Suite
     ├── unit/              # Fast logic tests
     └── integration/       # End-to-end Ghidra tests
 ```
-
----
-
-## 🐛 Troubleshooting
-
-**"Ghidra not found":**
-Ensure `JAVA_HOME` is set and Ghidra is installed. Try setting `GHIDRA_HEADLESS_PATH` manually.
-
-**"Analysis failed":**
-Check `analysis_output/` logs. Ensure the binary is a valid executable (PE/ELF).
-
-**"Server hangs":**
-Analysis can take 30-60s for large files. This is normal.

@@ -10,7 +10,7 @@ mcp = FastMCP("Ghidra Analyst")
 
 def _register_tools():
     """Import tools to register them with MCP. Deferred to avoid circular import."""
-    from .tools import analysis, query, system, graph, metadata  # noqa: F401
+    from .tools import analysis, query, system, graph, metadata, inspection  # noqa: F401
 
 
 def main():

@@ -18,7 +18,7 @@ __pycache__/
 htmlcov/
 
 # Skills/agent config (optional)
-.agent/
+.agent*/
 
 # Environment variables
 .env

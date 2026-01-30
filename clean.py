@@ -65,37 +65,39 @@ def main():
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Examples:
-  python clean.py --cache          # Remove __pycache__ only
-  python clean.py --output         # Remove analysis_output only
-  python clean.py --venv           # Remove .venv only
-  python clean.py --cache --output # Remove both
-  python clean.py --all            # Remove everything
-  python clean.py --all --dry-run  # Show what would be deleted
+  python clean.py                  # CLEAN EVERYTHING EXCEPT .venv (Default)
+  python clean.py --all            # Remove everything including .venv
+  python clean.py --venv           # Remove only .venv
+  python clean.py --output         # Remove only analysis output
+  python clean.py --dry-run        # Show what would be deleted
         """
     )
     parser.add_argument("--cache", action="store_true", help="Remove __pycache__")
     parser.add_argument("--venv", action="store_true", help="Remove .venv")
     parser.add_argument("--output", action="store_true", help="Remove analysis_output")
-    parser.add_argument("--all", action="store_true", help="Remove all")
+    parser.add_argument("--all", action="store_true", help="Remove everything")
+    parser.add_argument("--soft", action="store_true", help="Remove everything EXCEPT .venv (Default)")
     parser.add_argument("--dry-run", action="store_true", help="Show what would be deleted")
     
     args = parser.parse_args()
     
-    # Determine targets
+    targets = []
+    
+    # Logic for target selection
     if args.all:
         targets = list(TARGETS.keys())
+    elif args.venv:
+        # User explicitly targets venv
+        targets = ["venv", "cache", "output"] if args.soft else ["venv"]
+        if args.cache: targets.append("cache")
+        if args.output: targets.append("output")
+    elif args.cache or args.output:
+        # Granular selection
+        if args.cache: targets.append("cache")
+        if args.output: targets.append("output")
     else:
-        targets = []
-        if args.cache:
-            targets.append("cache")
-        if args.venv:
-            targets.append("venv")
-        if args.output:
-            targets.append("output")
-    
-    if not targets:
-        parser.print_help()
-        return
+        # Default behavior (or explicit --soft): Clean everything except venv
+        targets = ["cache", "output"]
     
     if args.dry_run:
         print("[dry-run] No files will be deleted\n")

@@ -7,3 +7,4 @@ from .query import *
 from .system import *
 from .graph import *
 from .metadata import *
+from .inspection import *

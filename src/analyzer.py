@@ -117,8 +117,15 @@ def analyze_single_binary(binary_path: str, force: bool = False) -> Dict[str, An
     
     os.makedirs(proj_dir, exist_ok=True)
 
+    # Ghidra Execution Command
+    executable = GHIDRA_HEADLESS_PATH
+    if os.name == 'nt' and not executable.lower().endswith('.bat'):
+        # On Windows, we must run the .bat file
+        if os.path.exists(executable + '.bat'):
+            executable += '.bat'
+    
     cmd = [
-        GHIDRA_HEADLESS_PATH,
+        executable,
         proj_dir,
         proj_name,
         "-import", binary_path,
