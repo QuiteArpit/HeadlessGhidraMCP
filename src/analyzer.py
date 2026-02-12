@@ -14,7 +14,7 @@ from .config import (
 )
 from .cache import get_file_hash, get_cached_analysis, load_index, save_index
 from .session import add_to_session
-from .platform_utils import get_platform_info, validate_safe_path, robust_rmtree, robust_move
+from .platform_utils import get_platform_info, validate_safe_path, robust_rmtree, robust_move, IS_WINDOWS
 from .response_utils import Timer
 
 
@@ -87,7 +87,7 @@ def analyze_single_binary(binary_path: str, force: bool = False) -> Dict[str, An
 
     # Ghidra Execution Command
     executable = GHIDRA_HEADLESS_PATH
-    if os.name == 'nt' and not executable.lower().endswith('.bat'):
+    if IS_WINDOWS and not executable.lower().endswith('.bat'):
         # On Windows, we must run the .bat file
         if os.path.exists(executable + '.bat'):
             executable += '.bat'

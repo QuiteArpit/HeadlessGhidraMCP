@@ -1,6 +1,7 @@
 """tests/conftest.py - Pytest fixtures for HeadlessGhidraMCP tests"""
 import pytest
 import os
+import sys
 
 
 def pytest_configure(config):
@@ -11,27 +12,29 @@ def pytest_configure(config):
 
 @pytest.fixture
 def mock_ghidra_install(tmp_path):
-    """Create a mock Ghidra installation structure"""
+    """Create a mock Ghidra installation structure (auto-detects OS)."""
     ghidra_dir = tmp_path / "ghidra_11.0_PUBLIC"
     support_dir = ghidra_dir / "support"
     support_dir.mkdir(parents=True)
     
-    # Create mock executable
-    executable = support_dir / "analyzeHeadless"
-    executable.write_text("#!/bin/bash\necho 'Mock Ghidra'")
-    executable.chmod(0o755)
+    if sys.platform == "win32":
+        executable = support_dir / "analyzeHeadless.bat"
+        executable.write_text("@echo off\necho Mock Ghidra")
+    else:
+        executable = support_dir / "analyzeHeadless"
+        executable.write_text("#!/bin/bash\necho 'Mock Ghidra'")
+        executable.chmod(0o755)
     
     return ghidra_dir
 
 
 @pytest.fixture
 def mock_ghidra_install_windows(tmp_path):
-    """Create a mock Ghidra installation structure for Windows"""
+    """Create a mock Ghidra installation structure for Windows."""
     ghidra_dir = tmp_path / "ghidra_11.0_PUBLIC"
     support_dir = ghidra_dir / "support"
     support_dir.mkdir(parents=True)
     
-    # Create mock executable (Windows .bat)
     executable = support_dir / "analyzeHeadless.bat"
     executable.write_text("@echo off\necho Mock Ghidra")
     
